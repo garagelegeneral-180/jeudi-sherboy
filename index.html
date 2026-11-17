@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jeudi Sherboy</title>
+<meta name="description" content="Les jeudis de la gang Sherboy : présences, idées de sorties, défis et rappels.">
+<meta name="theme-color" content="#e39a1f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jeudi Sherboy">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta property="og:title" content="Jeudi Sherboy">
+<meta property="og:description" content="T'es-tu là jeudi? Confirme ta présence et vote pour l'endroit.">
+<meta property="og:image" content="icons/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="picker" id="picker" hidden>
+  <div class="inner">
+    <img src="icons/icon-192.png" alt="">
+    <h1>Salut! T'es qui?</h1>
+    <div class="sub">Choisis ton nom. L'app s'en souvient sur ce téléphone.</div>
+    <div class="namegrid" id="namegrid"></div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="banner" id="setup" hidden>L'app n'est pas encore branchée. Remplis le fichier config.js en suivant le guide du README.</div>
+  <div class="banner" id="offline" hidden>Pas de connexion pour l'instant. Les réponses vont s'envoyer quand le réseau revient.</div>
+  <div class="top">
+    <div class="who"><label for="me">Je suis</label><select id="me"></select></div>
+    <span class="sync" id="sync">Connexion…</span>
+  </div>
+
+  <!-- CE JEUDI -->
+  <section id="v-jeudi" class="view stack">
+    <div class="ticket">
+      <div class="foam"></div><div class="bubbles"></div>
+      <div class="eyebrow">Une pinte · 1 Sherboy</div>
+      <h1>Jeudi Sherboy</h1>
+      <div class="date" id="date"></div>
+      <div id="stamp"></div>
+      <div class="perf"></div>
+      <div class="count" id="count"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="rsvptitle">T'es-tu là jeudi?</h2>
+      <div class="rsvp" id="rsvp">
+        <button data-v="oui" aria-pressed="false">Présent</button>
+        <button data-v="peut" aria-pressed="false">Peut-être</button>
+        <button data-v="non" aria-pressed="false">Pas cette fois</button>
+      </div>
+      <div class="extras" id="extras"></div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h2>Est-ce que ça lève?</h2><span class="sub" id="quorumtxt"></span></div>
+      <div class="meter"><i id="meter" style="width:0"></i></div>
+      <ul class="people" id="people"></ul>
+      <div class="note" id="quorumnote"></div>
+    </div>
+
+    <div class="card">
+      <h2>Capitaine de la semaine</h2>
+      <div class="capt" id="capt"></div>
+      <div class="queue" id="queue"></div>
+      <div class="note">Le capitaine tranche en cas d'égalité, lance la roue et choisit le défi. Le rôle passe au suivant chaque semaine.</div>
+    </div>
+
+    <div class="card">
+      <div class="eyebrow" style="color:var(--pop)" id="defitag">Défi du jeudi</div>
+      <div class="defi" id="defi"></div>
+      <div class="row2">
+        <button class="toggle" id="defiok" aria-pressed="false">Défi relevé</button>
+        <button class="toggle" id="definew">Piger un autre défi</button>
+        <button class="toggle hot" id="defihc">Défi hardcore</button>
+      </div>
+      <div class="note" id="defiwho"></div>
+    </div>
+
+    <div class="card">
+      <h2>Le prédicteur</h2>
+      <div class="sub">Gage combien de Sherboys vont vraiment se présenter. Le plus proche gagne le titre « Le Devin ».</div>
+      <div class="rounds" id="guess"></div>
+      <div class="note" id="guesses"></div>
+    </div>
+  </section>
+
+  <!-- IDÉES -->
+  <section id="v-idees" class="view stack" hidden>
+    <div class="card">
+      <div class="head"><h2>Nouveau cette semaine</h2><span class="eyebrow" style="color:var(--pop)" id="weeklbl"></span></div>
+      <div class="sub">Chaque semaine, trois places à Sherbrooke que la gang n'a pas encore essayées : un resto, un bar et une activité.</div>
+      <ul class="ideas" id="weekly"></ul>
+      <div class="row2"><button class="toggle" id="weekmore">Autres suggestions</button></div>
+      <div class="note">Vérifie les heures d'ouverture avant d'y aller.</div>
+    </div>
+
+    <div class="card">
+      <h2>On va où?</h2>
+      <form class="add" id="addform">
+        <div class="seg" role="group" aria-label="Type">
+          <button type="button" class="toggle" data-k="Resto" aria-pressed="true">Resto</button>
+          <button type="button" class="toggle" data-k="Bar" aria-pressed="false">Bar</button>
+          <button type="button" class="toggle" data-k="Activité" aria-pressed="false">Activité</button>
+        </div>
+        <div class="row">
+          <input type="text" id="ideain" placeholder="Ex. : bowling, tacos, karaoké…" maxlength="60" autocomplete="off">
+          <button class="btn primary" type="submit">Ajouter</button>
+        </div>
+      </form>
+      <ul class="ideas" id="ideas"></ul>
+      <div class="note" id="vetonote"></div>
+    </div>
+
+    <div class="card">
+      <h2>La roue du jeudi</h2>
+      <div class="sub">Tourne parmi les 6 idées les plus votées (sans les vetos).</div>
+      <div class="wheelwrap">
+        <canvas id="wheel" width="560" height="560" style="width:280px"></canvas>
+        <button class="btn primary" id="spin">Faire tourner</button>
+        <div class="result" id="result" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CARNET -->
+  <section id="v-carnet" class="view stack" hidden>
+    <div class="card">
+      <h2>C'est à qui la tournée?</h2>
+      <div class="sub">Touche le nom de celui qui paye une tournée. Celui qui en a payé le moins est en surbrillance.</div>
+      <div class="rounds" id="rounds"></div>
+    </div>
+
+    <div class="card">
+      <h2>Le carnet des jeudis</h2>
+      <div class="sub">Après la soirée, note l'endroit et donne-lui des étoiles.</div>
+      <form class="add" id="logform">
+        <div class="row"><input type="text" id="logplace" placeholder="On est allés où?" maxlength="60" autocomplete="off"></div>
+        <div class="row" style="align-items:center;justify-content:space-between">
+          <div class="starpick" id="starpick" role="group" aria-label="Étoiles"></div>
+          <button class="btn primary" type="submit">Ajouter au carnet</button>
+        </div>
+      </form>
+      <ul class="log" id="log"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Passeport Sherbrooke</h2>
+      <div class="sub" id="passsub"></div>
+      <div class="stampgrid" id="passport"></div>
+    </div>
+
+    <div class="card">
+      <div class="head">
+        <h2>Mur de souvenirs</h2>
+        <label class="btn primary file" for="photoin">Ajouter une photo<input type="file" id="photoin" accept="image/*"></label>
+      </div>
+      <div class="sub">Une photo par jeudi, pour se rappeler la soirée.</div>
+      <div id="photos"></div>
+    </div>
+
+    <div class="card">
+      <h2>Les titres de la gang</h2>
+      <div class="badges" id="badges"></div>
+    </div>
+  </section>
+
+  <!-- RAPPELS -->
+  <section id="v-rappels" class="view stack" hidden>
+    <div class="card">
+      <h2>Notifications</h2>
+      <div class="status" id="notifstatus"></div>
+      <button class="btn primary" id="notifbtn">Activer les notifications</button>
+    </div>
+
+    <div class="card">
+      <h2>Mes rappels</h2>
+      <div class="sub">Choisis quand ton téléphone te fait signe le jeudi.</div>
+      <ul class="rem" id="rem"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Mettre l'app sur ton écran d'accueil</h2>
+      <div class="seg" role="group" aria-label="Téléphone">
+        <button class="toggle" data-os="ios" aria-pressed="true">iPhone</button>
+        <button class="toggle" data-os="android" aria-pressed="false">Android</button>
+      </div>
+      <ol class="steps" id="steps-ios">
+        <li>Ouvre le lien de l'app dans <b>Safari</b>. Si tu l'as ouvert à partir de Messenger ou Facebook, touche <b>⋯</b> puis <b>Ouvrir dans le navigateur</b>.</li>
+        <li>Touche le bouton <b>Partager</b>, le carré avec une flèche vers le haut.</li>
+        <li>Défile vers le bas et touche <b>Sur l'écran d'accueil</b>.</li>
+        <li>Garde le nom <b>Jeudi Sherboy</b> et touche <b>Ajouter</b>.</li>
+        <li>Ouvre l'app à partir de la nouvelle icône, puis active les notifications plus haut.</li>
+      </ol>
+      <ol class="steps" id="steps-android" hidden>
+        <li>Ouvre le lien de l'app dans <b>Chrome</b>. Si tu l'as ouvert à partir de Messenger ou Facebook, touche <b>⋮</b> puis <b>Ouvrir dans Chrome</b>.</li>
+        <li>Touche le menu <b>⋮</b> en haut à droite.</li>
+        <li>Touche <b>Ajouter à l'écran d'accueil</b> ou <b>Installer l'application</b>.</li>
+        <li>Confirme avec <b>Installer</b>.</li>
+        <li>Ouvre l'app à partir de la nouvelle icône, puis active les notifications plus haut.</li>
+      </ol>
+      <div class="note">Sur iPhone, les notifications demandent iOS 16.4 ou plus récent, et l'app doit être ouverte à partir de l'icône sur l'écran d'accueil.</div>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs" role="tablist"><div>
+  <button role="tab" data-t="jeudi" aria-selected="true">Ce jeudi</button>
+  <button role="tab" data-t="idees" aria-selected="false">Idées</button>
+  <button role="tab" data-t="carnet" aria-selected="false">Carnet</button>
+  <button role="tab" data-t="rappels" aria-selected="false">Rappels</button>
+</div></nav>
+<div class="toast" id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

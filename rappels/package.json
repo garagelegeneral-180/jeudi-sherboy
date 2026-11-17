@@ -1,0 +1,9 @@
+{
+  "name": "jeudi-sherboy-rappels",
+  "private": true,
+  "type": "module",
+  "description": "Envoie les rappels du jeudi de l'app Jeudi Sherboy.",
+  "dependencies": {
+    "firebase-admin": "12.7.0"
+  }
+}

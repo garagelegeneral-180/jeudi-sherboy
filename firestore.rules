@@ -1,0 +1,17 @@
+rules_version = '2';
+// Règles de sécurité de la base de données Jeudi Sherboy.
+// Seuls les téléphones qui ont ouvert l'app (connexion anonyme) peuvent lire et écrire.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /weeks/{week} { allow read, write: if signedIn(); }
+    match /ideas/{id}   { allow read, write: if signedIn(); }
+    match /state/{id}   { allow read, write: if signedIn(); }
+    match /log/{id}     { allow read, write: if signedIn(); }
+    match /photos/{id}  { allow read, create, delete: if signedIn(); }
+    match /prefs/{id}   { allow read, write: if signedIn(); }
+    // Les jetons de notification : chacun enregistre le sien, personne ne peut lire la liste.
+    match /tokens/{token} { allow create, update, delete: if signedIn(); allow read: if false; }
+  }
+}
