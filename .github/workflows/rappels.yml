@@ -1,0 +1,33 @@
+name: Rappels du jeudi
+
+on:
+  schedule:
+    # Chaque heure le jeudi, heure de Sherbrooke (9 h à minuit), été comme hiver.
+    # GitHub compte en heure UTC : jeudi 13 h UTC à vendredi 4 h UTC.
+    - cron: "5 13-23 * * 4"
+    - cron: "5 0-4 * * 5"
+  workflow_dispatch:
+    inputs:
+      rappel:
+        description: "Envoyer un rappel tout de suite (test, rsvp, leve, vote, lift ou ou)"
+        required: false
+        default: "test"
+
+jobs:
+  rappels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Installer
+        working-directory: rappels
+        run: npm install --no-audit --no-fund
+      - name: Envoyer les rappels
+        working-directory: rappels
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RAPPEL: ${{ github.event.inputs.rappel }}
+        run: node rappels.mjs
