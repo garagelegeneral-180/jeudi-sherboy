@@ -9,7 +9,9 @@ self.JS_DATA = {
     ["tonight", "Tonight is the night", "tonight is the night"],
     ["mush", "On mush la place", "on mush la place"],
     ["dos", "J'ai mal au dos", "a mal au dos"],
-    ["noir", "Ça va être tout noir!", "ça va être tout noir!"]
+    ["noir", "Ça va être tout noir!", "ça va être tout noir!"],
+    ["garage", "Tout le monde au garage!", "tout le monde au garage"],
+    ["maison", "Tout le monde à maison!", "tout le monde à maison"]
   ],
 
   defis: [
