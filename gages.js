@@ -105,7 +105,7 @@ function renderWheel() {
       ${b.by === me ? `<button class="toggle" id="wcancel">Annuler le gage</button>` : ""}</div>
       ${joined && b.players.length < 2 ? `<div class="note">Il faut au moins 2 joueurs. Les autres peuvent s'inscrire sur leur téléphone.</div>` : ""}`;
   }
-  if (b && b.by !== me && !b.players.includes(me)) yourTurn("inv" + b.id, `${nm(b.by)} t'invite à la roue des gages!`, `Mise : ${b.mise} jetons. Inscris-toi dans l'onglet Gages.`);
+  if (b && b.by !== me && !b.players.includes(me)) yourTurn("inv" + b.id, `${nm(b.by)} t'invite à la roue des gages!`, `Mise : ${b.mise} jetons. Inscris-toi dans l'onglet Casino.`);
   $("#wheelbox").innerHTML = html;
   if (!wSpinning) {
     if (b) drawBetWheel(b.players.map(nm));
@@ -162,7 +162,7 @@ function renderDice() {
       ${b.players.length < 2 ? `<div class="note">Il faut au moins 2 joueurs.</div>` : ""}`;
     show = b;
   }
-  if (b && b.by !== me && !b.players.includes(me) && !Object.keys((b.rolls || {}).r1 || {}).length) yourTurn("inv" + b.id, `${nm(b.by)} t'invite aux dés!`, `Mise : ${b.mise} jetons. Inscris-toi dans l'onglet Gages.`);
+  if (b && b.by !== me && !b.players.includes(me) && !Object.keys((b.rolls || {}).r1 || {}).length) yourTurn("inv" + b.id, `${nm(b.by)} t'invite aux dés!`, `Mise : ${b.mise} jetons. Inscris-toi dans l'onglet Casino.`);
   $("#dicebox").innerHTML = html;
   if (show) {
     const r = show.round || 1, elig = r === 1 ? show.players : show.tied, rolls = (show.rolls || {})["r" + r] || {};
@@ -393,7 +393,7 @@ function renderRace() {
     const mine = (b.bets || {})[me];
     if (mine) { racePick = mine.lob; }
     const n = Object.keys(b.bets || {}).length;
-    if (b.by !== me && !mine) yourTurn("inv" + b.id, `${nm(b.by)} ouvre une course de homards!`, "Choisis ton homard dans l'onglet Gages.");
+    if (b.by !== me && !mine) yourTurn("inv" + b.id, `${nm(b.by)} ouvre une course de homards!`, "Choisis ton homard dans l'onglet Casino.");
     html = `<div class="sub">Course ouverte par ${esc(nm(b.by))} · ${n} parieur${n > 1 ? "s" : ""}. Choisis ton homard :</div>
       <div class="picklob">${LOBS.map((l, i) => `<button data-lob="${i}" class="${i === racePick ? "next" : ""}"><span>${i + 1}. ${l[0]}</span><b>×${l[2]}</b></button>`).join("")}</div>
       <div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(raceMise, "rm")}</div>
@@ -428,6 +428,161 @@ $("#racebox").addEventListener("click", e => {
   });
 });
 
+/* ---------- La roulette (européenne, un seul zéro) ---------- */
+const ROU_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const colorOf = n => n === 0 ? "vert" : RED.has(n) ? "rouge" : "noir";
+const ROU_KINDS = [["rouge", "Rouge"], ["noir", "Noir"], ["pair", "Pair"], ["impair", "Impair"], ["manque", "1 à 18"], ["passe", "19 à 36"], ["d1", "1 à 12"], ["d2", "13 à 24"], ["d3", "25 à 36"]];
+const ROU_SPIN = 7000, ROU_LEAD = 1500;
+let rouMise = 25, rouAnim = null, rouAngle = 0;
+function rouWins(k, v, n) {
+  if (k === "num") return v === n ? 36 : 0;
+  if (n === 0) return 0;
+  if (k === "rouge") return RED.has(n) ? 2 : 0; if (k === "noir") return !RED.has(n) ? 2 : 0;
+  if (k === "pair") return n % 2 === 0 ? 2 : 0; if (k === "impair") return n % 2 ? 2 : 0;
+  if (k === "manque") return n <= 18 ? 2 : 0; if (k === "passe") return n >= 19 ? 2 : 0;
+  if (k[0] === "d") { const d = +k[1]; return n > (d - 1) * 12 && n <= d * 12 ? 3 : 0; }
+  return 0;
+}
+const rouGain = (list, n) => (list || []).reduce((a, x) => a + x.m * rouWins(x.k, x.v, n), 0);
+const rouStake = list => (list || []).reduce((a, x) => a + x.m, 0);
+const openRou = () => A().S.bets.find(b => b.type === "roulette" && (b.status === "ouvert" || (b.status === "fini" && Date.now() < b.finishAt)));
+const lastRou = () => A().S.bets.find(b => b.type === "roulette" && b.status === "fini");
+function drawRou(angle, ballOn) {
+  const c = $("#rouwheel"), x = c.getContext("2d"), cx = 280, cy = 280, R = 262, seg = 2 * Math.PI / 37;
+  x.clearRect(0, 0, 560, 560);
+  x.beginPath(); x.arc(cx, cy, R + 14, 0, 2 * Math.PI); x.fillStyle = "#6b3f1f"; x.fill();
+  ROU_ORDER.forEach((n, i) => {
+    const a0 = angle + i * seg - Math.PI / 2 - seg / 2;
+    x.beginPath(); x.moveTo(cx, cy); x.arc(cx, cy, R, a0, a0 + seg); x.closePath();
+    x.fillStyle = n === 0 ? "#118a3c" : RED.has(n) ? "#c9182b" : "#1d1d1d"; x.fill();
+    x.strokeStyle = "#d9b44a"; x.lineWidth = 2; x.stroke();
+    x.save(); x.translate(cx, cy); x.rotate(a0 + seg / 2 + Math.PI / 2); x.fillStyle = "#fff"; x.font = "700 22px DM Sans, sans-serif"; x.textAlign = "center"; x.fillText(n, 0, -R + 30); x.restore();
+  });
+  x.beginPath(); x.arc(cx, cy, R * 0.55, 0, 2 * Math.PI); x.fillStyle = "#5a3418"; x.fill();
+  x.beginPath(); x.arc(cx, cy, R * 0.18, 0, 2 * Math.PI); x.fillStyle = "#d9b44a"; x.fill();
+  // la bille, en haut de la roue
+  const by = ballOn ? cy - R + 54 : cy - R - 2;
+  x.beginPath(); x.arc(cx, by, 11, 0, 2 * Math.PI); x.fillStyle = "#fff"; x.fill(); x.strokeStyle = "#999"; x.lineWidth = 2; x.stroke();
+  x.beginPath(); x.moveTo(cx - 14, 4); x.lineTo(cx + 14, 4); x.lineTo(cx, 24); x.closePath(); x.fillStyle = "#ffd21f"; x.fill();
+}
+// Angle final : le numéro gagnant arrive sous la flèche du haut. Même calcul sur tous les téléphones.
+function rouAngleAt(b, t) {
+  const seg = 2 * Math.PI / 37, idx = ROU_ORDER.indexOf(b.result);
+  const end = -idx * seg + 2 * Math.PI * (5 + (b.seed % 3)), u = Math.max(0, Math.min(1, t / ROU_SPIN));
+  return end * (1 - Math.pow(1 - u, 3));
+}
+function runRou(b) {
+  cancelAnimationFrame(rouAnim);
+  const step = () => {
+    const t = Date.now() - b.startAt;
+    drawRou(rouAngleAt(b, t), t >= ROU_SPIN * 0.92);
+    if (t < ROU_SPIN) { rouAnim = requestAnimationFrame(step); $("#rouresult").textContent = t < 0 ? "Rien ne va plus…" : "La bille tourne…"; return; }
+    const me = A().me, mine = (b.bets || {})[me], g = rouGain(mine, b.result), st = rouStake(mine);
+    $("#rouresult").textContent = `${b.result} ${colorOf(b.result)}!` + (mine ? (g ? ` Tu ramasses ${J(g)}!` : " La banque garde ta mise.") : "");
+    if (!animated.has("rou" + b.id)) { animated.add("rou" + b.id); if (g > st) confetti(b.result === 0 || g >= st * 10 ? "big" : ""); }
+    renderLedger();
+    setTimeout(() => { if (!openRou()) renderRou(); }, 400);
+  };
+  step();
+}
+function renderRou() {
+  const { me, esc } = A(); const b = openRou();
+  if (!b) {
+    const last = lastRou();
+    if (!rouAnim) drawRou(last ? rouAngleAt(last, ROU_SPIN) : 0, !!last);
+    if (last && !rouAnim) $("#rouresult").textContent = `Dernier tour : ${last.result} ${colorOf(last.result)}.`;
+    $("#roubox").innerHTML = `<button class="btn primary" id="rouopen">Ouvrir la table de roulette</button>`; return;
+  }
+  if (b.status === "fini") { $("#roubox").innerHTML = `<div class="sub">Rien ne va plus! La roue tourne.</div>`; runRou(b); return; }
+  const mine = (b.bets || {})[me] || [], n = Object.keys(b.bets || {}).length;
+  if (b.by !== me && !mine.length) yourTurn("inv" + b.id, `${nm(b.by)} ouvre la roulette!`, "Place tes mises dans l'onglet Casino.");
+  const chip = (k, v) => { const sum = mine.filter(x => x.k === k && x.v === v).reduce((a, x) => a + x.m, 0); return sum ? `<span class="chip">${sum}</span>` : ""; };
+  drawRou(0, false); $("#rouresult").textContent = "Faites vos jeux!";
+  $("#roubox").innerHTML = `<div class="sub">Table ouverte par ${esc(nm(b.by))} · ${n} joueur${n > 1 ? "s" : ""}. Touche une case pour miser ${rouMise} jetons.</div>
+    <div class="row2" style="align-items:center"><span class="note">Jeton</span>${miseButtons(rouMise, "roum")}</div>
+    <div class="rbets">${ROU_KINDS.map(([k, l]) => `<button data-rk="${k}" class="${k === "rouge" ? "rouge" : k === "noir" ? "noir" : ""}">${l}${chip(k, null)}</button>`).join("")}</div>
+    <div class="rnums"><button data-rn="0" class="vert">0${chip("num", 0)}</button>${Array.from({ length: 36 }, (_, i) => i + 1).map(n => `<button data-rn="${n}" class="${colorOf(n)}">${n}${chip("num", n)}</button>`).join("")}</div>
+    <div class="note">Tes mises : ${J(rouStake(mine))}${Object.entries(b.bets || {}).filter(([id]) => id !== me).map(([id, l]) => ` · ${esc(nm(id))} : ${J(rouStake(l))}`).join("")}</div>
+    <div class="row2">${mine.length ? `<button class="toggle" id="rouclear">Retirer mes mises</button>` : ""}
+    ${(b.by === me || mine.length) && n >= 1 ? `<button class="btn hot" id="rouspin">Lancer la bille</button>` : ""}
+    ${b.by === me ? `<button class="toggle" id="roucancel">Fermer la table</button>` : ""}</div>`;
+}
+$("#roubox").addEventListener("click", e => {
+  const { me } = A(); const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.roum) { rouMise = +t.dataset.roum; return renderRou(); }
+  if (t.id === "rouopen") { if (needPresent()) return;
+    return tx("bets", newId(), () => ({ type: "roulette", week: A().WEEK, status: "ouvert", by: me, bets: {}, created: Date.now() }), "Table de roulette ouverte"); }
+  const b = openRou(); if (!b || b.status !== "ouvert") return;
+  const add = (k, v) => { if (needPresent()) return; const m = rouMise;
+    tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, bets: { ...(cur.bets || {}), [me]: [...((cur.bets || {})[me] || []), { k, v, m }].slice(-40) } } : undefined); };
+  if (t.dataset.rk) add(t.dataset.rk, null);
+  if (t.dataset.rn != null) add("num", +t.dataset.rn);
+  if (t.id === "rouclear") tx("bets", b.id, cur => { if (!cur || cur.status !== "ouvert") return undefined; const bets = { ...(cur.bets || {}) }; delete bets[me]; return { ...cur, bets }; });
+  if (t.id === "roucancel") tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, status: "annule" } : undefined, "Table fermée");
+  if (t.id === "rouspin") tx("bets", b.id, cur => {
+    if (!cur || cur.status !== "ouvert" || !Object.keys(cur.bets || {}).length) return undefined;
+    const a = new Uint32Array(2); crypto.getRandomValues(a);
+    const startAt = Date.now() + ROU_LEAD;
+    return { ...cur, status: "fini", result: a[0] % 37, seed: a[1], startAt, finishAt: startAt + ROU_SPIN };
+  });
+});
+
+/* ---------- Plinko ---------- */
+const PLK_MULT = [33, 11, 4, 2, 1.1, 0.5, 0.3, 0.5, 1.1, 2, 4, 11, 33];   // environ 95 % redonné
+const PLK_ROWS = 12;
+let plkMise = 25, plkBusy = false;
+function plkGeom() { const c = $("#plinko"), W = c.width, H = c.height, top = 40, gap = (H - 130) / PLK_ROWS, dx = (W - 40) / (PLK_ROWS + 1); return { c, W, H, top, gap, dx }; }
+function drawPlinko(ball, hit) {
+  const { c, W, H, top, gap, dx } = plkGeom(), x = c.getContext("2d");
+  const cs = getComputedStyle(document.documentElement), tok = v => cs.getPropertyValue(v).trim();
+  x.clearRect(0, 0, W, H);
+  for (let r = 0; r < PLK_ROWS; r++) for (let k = 0; k <= r + 2; k++) {
+    const px = W / 2 + (k - (r + 2) / 2) * dx, py = top + r * gap;
+    x.beginPath(); x.arc(px, py, 5, 0, 2 * Math.PI); x.fillStyle = tok("--muted"); x.fill();
+  }
+  const cols = ["#ff2e88", "#ff5a3c", "#ff7a1a", "#ffb31f", "#e3c21f", "#9ccf2a", "#3aa61c", "#9ccf2a", "#e3c21f", "#ffb31f", "#ff7a1a", "#ff5a3c", "#ff2e88"];
+  PLK_MULT.forEach((m, i) => {
+    const px = W / 2 + (i - PLK_ROWS / 2) * dx, py = top + PLK_ROWS * gap + 18;
+    x.fillStyle = cols[i]; x.globalAlpha = hit === i ? 1 : 0.85;
+    x.beginPath(); x.roundRect ? x.roundRect(px - dx / 2 + 2, py, dx - 4, 34, 6) : x.rect(px - dx / 2 + 2, py, dx - 4, 34); x.fill();
+    x.globalAlpha = 1; x.fillStyle = "#1b1610"; x.font = `800 ${dx > 34 ? 15 : 12}px DM Sans, sans-serif`; x.textAlign = "center"; x.fillText("×" + m, px, py + 23);
+    if (hit === i) { x.strokeStyle = "#fff"; x.lineWidth = 4; x.stroke(); }
+  });
+  if (ball) { x.beginPath(); x.arc(ball.x, ball.y, 10, 0, 2 * Math.PI); x.fillStyle = "#e8262b"; x.fill(); x.strokeStyle = "#fff"; x.lineWidth = 3; x.stroke(); }
+}
+function renderPlinkoStatic() {
+  $("#plkmise").innerHTML = [10, 25, 50, 100].map(m => `<button class="round${m === plkMise ? " next" : ""}" data-pm="${m}">${m}</button>`).join("");
+  if (!plkBusy) drawPlinko(null, null);
+}
+$("#plkmise").addEventListener("click", e => { if (e.target.dataset.pm) { plkMise = +e.target.dataset.pm; renderPlinkoStatic(); } });
+$("#plkgo").addEventListener("click", () => {
+  if (plkBusy || needPresent()) return;
+  plkBusy = true; $("#plkgo").disabled = true; $("#plkresult").textContent = "";
+  const a = new Uint32Array(1); crypto.getRandomValues(a);
+  const moves = Array.from({ length: PLK_ROWS }, (_, i) => (a[0] >> i) & 1), slot = moves.reduce((s, m) => s + m, 0);
+  const mise = plkMise, gain = Math.round(mise * PLK_MULT[slot]);
+  // Le résultat est enregistré tout de suite : rien ne se perd si le téléphone se met en veille pendant la chute.
+  tx("bets", newId(), () => ({ type: "plinko", by: A().me, mise, gain, slot, week: A().WEEK, status: "fini", created: Date.now() }));
+  const { W, top, gap, dx } = plkGeom();
+  // points de passage : la bille descend de clou en clou
+  const pts = [{ x: W / 2, y: top - 30 }]; let k = 0;
+  for (let r = 0; r < PLK_ROWS; r++) { k += moves[r]; pts.push({ x: W / 2 + (k - (r + 1) / 2) * dx, y: top + r * gap + gap / 2 }); }
+  pts.push({ x: W / 2 + (slot - PLK_ROWS / 2) * dx, y: top + PLK_ROWS * gap + 30 });
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches, per = reduce ? 1 : 140, t0 = performance.now();
+  (function step(t) {
+    const p = (t - t0) / per, i = Math.min(pts.length - 2, Math.floor(p)), u = Math.min(1, p - i);
+    const A1 = pts[i], B = pts[i + 1];
+    const ball = { x: A1.x + (B.x - A1.x) * u, y: A1.y + (B.y - A1.y) * u - Math.sin(u * Math.PI) * 10 };
+    drawPlinko(ball, null);
+    if (p < pts.length - 1) return requestAnimationFrame(step);
+    drawPlinko(pts[pts.length - 1], slot); navigator.vibrate?.(40);
+    plkBusy = false; $("#plkgo").disabled = false;
+    $("#plkresult").textContent = gain > mise ? `×${PLK_MULT[slot]} : tu ramasses ${J(gain)}!` : gain === mise ? "Mise remboursée" : `×${PLK_MULT[slot]} : tu récupères ${J(gain)}`;
+    if (PLK_MULT[slot] >= 11) confetti(PLK_MULT[slot] >= 33 ? "big" : "");
+  })(t0);
+});
+
 /* ---------- Classement ---------- */
 function renderLedger() {
   const { esc, MEMBERS, shortDate } = A(); const bets = A().S.bets;
@@ -443,6 +598,13 @@ function renderLedger() {
       for (const [id, v] of Object.entries(b.bets || {})) { const g = v.lob === b.winner ? Math.round(v.mise * LOBS[b.winner][2]) : 0; net[id] = (net[id] || 0) + g - v.mise; if (g && (!best || g > best.g)) best = { id, g: g - v.mise }; }
       hist.push(`Homards : ${LOBS[b.winner][0]} gagne${best ? ` · ${nm(best.id)} +${J(best.g)}` : ""}`);
     }
+    else if (b.type === "roulette") {
+      if (Date.now() < b.finishAt) continue;
+      let best = null;
+      for (const [id, list] of Object.entries(b.bets || {})) { const d = rouGain(list, b.result) - rouStake(list); net[id] = (net[id] || 0) + d; if (d > 0 && (!best || d > best.d)) best = { id, d }; }
+      hist.push(`Roulette : ${b.result} ${colorOf(b.result)}${best ? ` · ${nm(best.id)} +${J(best.d)}` : ""}`);
+    }
+    else if (b.type === "plinko") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.gain >= b.mise * 11) hist.push(`Plinko : ${nm(b.by)} +${J(b.gain - b.mise)}`); else continue; }
     else if (b.type === "slot") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.gain >= b.mise * 10) hist.push(`Slots : ${nm(b.by)} +${J(b.gain - b.mise)}`); else continue; }
     else if (b.type === "poker") { const ids = new Set([...Object.keys(b.buyins || {}), ...Object.keys(b.finals || {})]);
       let top = null; ids.forEach(id => { const d = (b.finals[id] || 0) - (b.buyins[id] || 0); net[id] = (net[id] || 0) + d; if (!top || d > top.d) top = { id, d }; });
@@ -464,7 +626,7 @@ $("#settledone").addEventListener("click", () => {
   confirmReset = false; tx("bets", newId(), () => ({ type: "zero", status: "fini", by: A().me, created: Date.now() }), "Tous les comptes sont revenus à 1 000 jetons");
 });
 
-function render() { if (!window.JSAPI) return; renderSlotStatic(); renderRace(); renderWheel(); renderDice(); renderLedger(); }
+function render() { if (!window.JSAPI) return; renderSlotStatic(); renderPlinkoStatic(); renderRou(); renderRace(); renderWheel(); renderDice(); renderLedger(); }
 window.Gages = { render, renderPoker };
 // En ouvrant l'onglet Gages, on redessine la piste à la bonne largeur.
 document.querySelector('nav.tabs [data-t="gages"]')?.addEventListener("click", () => setTimeout(() => { render(); renderPoker(); }, 30));

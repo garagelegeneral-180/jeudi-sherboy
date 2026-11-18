@@ -243,6 +243,23 @@
     </div>
 
     <div class="card">
+      <h2>La roulette</h2>
+      <div class="sub">Roulette européenne, en direct. Place tes mises sur ton téléphone, la roue tourne sur tous les écrans. Numéro plein : 35 contre 1.</div>
+      <div class="wheelwrap"><canvas id="rouwheel" width="560" height="560" style="width:260px"></canvas></div>
+      <div class="result" id="rouresult" aria-live="polite"></div>
+      <div id="roubox"></div>
+    </div>
+
+    <div class="card">
+      <h2>Plinko</h2>
+      <div class="sub">Lâche la bille et regarde-la rebondir. Les cases du bord paient 33 fois la mise!</div>
+      <canvas id="plinko" width="520" height="560" style="width:100%;max-width:340px;align-self:center"></canvas>
+      <div class="row2" style="align-items:center;justify-content:center"><span class="note">Mise</span><div class="rounds" id="plkmise"></div></div>
+      <button class="btn primary" id="plkgo">Lâcher la bille</button>
+      <div class="result" id="plkresult" aria-live="polite"></div>
+    </div>
+
+    <div class="card">
       <h2>Le poker du jeudi</h2>
       <div class="sub">Texas Hold'em en direct. Chacun voit ses cartes sur son téléphone, le flop, le turn et la river sortent sur tous les écrans.</div>
       <div id="poker"></div>
@@ -320,7 +337,7 @@
   <button role="tab" data-t="jasette" aria-selected="false">Jasette<span class="badge-n" id="chatbadge" hidden></span></button>
   <button role="tab" data-t="idees" aria-selected="false">Idées</button>
   <button role="tab" data-t="carnet" aria-selected="false">Carnet</button>
-  <button role="tab" data-t="gages" aria-selected="false">Gages</button>
+  <button role="tab" data-t="gages" aria-selected="false" class="casino-tab"><span class="ct-ico" aria-hidden="true">🎰</span>Casino</button>
   <button role="tab" data-t="rappels" aria-selected="false">Rappels</button>
 </div></nav>
 <div class="toast" id="toast" hidden></div>

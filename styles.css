@@ -265,6 +265,22 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-to
 .picklob button.next{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);font-weight:700}
 .picklob b{font-family:var(--mono)}
 .countdown{font-family:var(--display);font-size:48px;font-weight:800;text-align:center;color:#fff;position:absolute;inset:0;display:grid;place-items:center;z-index:3;text-shadow:0 3px 0 #000}
+/* Roulette */
+.rbets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.rbets button,.rnums button{font:inherit;font-size:13px;font-weight:700;border:2px solid var(--line);border-radius:8px;padding:8px 2px;cursor:pointer;background:transparent;color:var(--ink);position:relative}
+.rbets button.rouge,.rnums button.rouge{background:#c9182b;color:#fff;border-color:#c9182b}
+.rbets button.noir,.rnums button.noir{background:#1d1d1d;color:#fff;border-color:#1d1d1d}
+.rnums{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.rnums button{padding:6px 0;font-family:var(--mono)}
+.rnums button.vert{background:#118a3c;color:#fff;border-color:#118a3c;grid-column:span 6}
+.chip{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:10px;line-height:20px;font-family:var(--mono);border:2px solid #fff}
+/* Onglet Casino mis en évidence */
+nav.tabs button.casino-tab{position:relative;color:#3a2400;background:linear-gradient(180deg,#ffe27a,#f0b03c);border-top-color:#ff2e88;border-radius:12px 12px 0 0;margin-top:-6px;padding-top:4px;box-shadow:0 -4px 14px rgba(240,176,60,.55);overflow:hidden}
+nav.tabs button.casino-tab .ct-ico{display:block;font-size:18px;line-height:1.1}
+nav.tabs button.casino-tab[aria-selected="true"]{color:#1c1204;border-top-color:#ff2e88;background:linear-gradient(180deg,#fff0a8,#ffbf3c)}
+nav.tabs button.casino-tab::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.75),transparent);animation:shine 3.2s ease-in-out infinite}
+@keyframes shine{0%,60%{left:-60%}100%{left:130%}}
+@media (prefers-reduced-motion:reduce){nav.tabs button.casino-tab::after{animation:none;display:none}}
 .round.on{background:var(--ok);border-color:var(--ok);color:var(--bg);font-weight:700}
 .pk-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 .pk-row input{width:72px;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px}
