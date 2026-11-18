@@ -106,7 +106,8 @@ async function firebaseStore() {
     watch(cbs) {
       const onErr = e => { console.error(e); setSync("Erreur de connexion"); };
       fs.onSnapshot(fs.doc(db, "weeks", WEEK), { includeMetadataChanges: true }, s => { cbs.week(s.data() || {}); setSync(s.metadata.fromCache ? "Hors ligne" : "En direct"); }, onErr);
-      fs.onSnapshot(fs.query(fs.collection(db, "weeks"), fs.orderBy(fs.documentId(), "desc"), fs.limit(60)), s => cbs.weeks(docs(s)), onErr);
+      // Peu de documents (un par semaine) : on lit tout et on trie sur le téléphone, sans index spécial.
+      fs.onSnapshot(fs.collection(db, "weeks"), s => cbs.weeks(docs(s).sort((x, y) => x.id < y.id ? 1 : -1).slice(0, 60)), onErr);
       fs.onSnapshot(fs.query(fs.collection(db, "ideas"), fs.limit(200)), s => cbs.ideas(docs(s).map(d => ({ ...d, created: ts(d.created) })).sort((x, y) => x.created - y.created)), onErr);
       fs.onSnapshot(fs.doc(db, "state", "main"), s => cbs.state(s.data() || {}), onErr);
       fs.onSnapshot(fs.query(fs.collection(db, "log"), fs.orderBy("date", "desc"), fs.limit(50)), s => cbs.log(docs(s)), onErr);
@@ -118,7 +119,7 @@ async function firebaseStore() {
         s => cbs.quotes(s.docs.map(d => { const v = d.data({ serverTimestamps: "estimate" }); return { id: d.id, ...v, created: ts(v.created) || Date.now() }; })), onErr);
       fs.onSnapshot(fs.query(fs.collection(db, "bets"), fs.orderBy("created", "desc"), fs.limit(5000)),
         s => cbs.bets(s.docs.map(d => { const v = d.data({ serverTimestamps: "estimate" }); return { id: d.id, ...v, created: ts(v.created) || Date.now() }; })), onErr);
-      fs.onSnapshot(fs.query(fs.collection(db, "gazette"), fs.orderBy(fs.documentId(), "desc"), fs.limit(30)), s => cbs.gazette(docs(s)), onErr);
+      fs.onSnapshot(fs.collection(db, "gazette"), s => cbs.gazette(docs(s).sort((x, y) => x.id < y.id ? 1 : -1).slice(0, 60)), onErr);
       fs.onSnapshot(fs.doc(db, "tables", "main"), s => cbs.table(s.exists() ? s.data() : null), onErr);
     },
     merge: (col, id, p) => fs.setDoc(fs.doc(db, col, id), conv(p), { merge: true }),
