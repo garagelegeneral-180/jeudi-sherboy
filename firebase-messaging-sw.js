@@ -2,8 +2,8 @@
 // 1. garde une copie de l'app pour qu'elle s'ouvre vite, même avec un mauvais réseau;
 // 2. affiche les notifications des rappels quand l'app est fermée.
 importScripts("config.js");
-const CACHE = "jeudi-sherboy-v1";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "data.js", "manifest.webmanifest",
+const CACHE = "jeudi-sherboy-v2";
+const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "data.js", "gazette.js", "poker.js", "gages.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon-32.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -14,7 +14,8 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET" || u.origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
+  // « no-cache » : on demande toujours au serveur si le fichier a changé, pour que tout le monde ait la dernière version.
+  e.respondWith(fetch(e.request.url, { cache: "no-cache", credentials: "same-origin" }).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
     .catch(() => caches.match(e.request).then(r => r || caches.match("index.html"))));
 });
 
