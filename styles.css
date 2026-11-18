@@ -281,6 +281,38 @@ nav.tabs button.casino-tab[aria-selected="true"]{color:#1c1204;border-top-color:
 nav.tabs button.casino-tab::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.75),transparent);animation:shine 3.2s ease-in-out infinite}
 @keyframes shine{0%,60%{left:-60%}100%{left:130%}}
 @media (prefers-reduced-motion:reduce){nav.tabs button.casino-tab::after{animation:none;display:none}}
+/* Course de chevaux */
+.track.turf{background:repeating-linear-gradient(90deg,#3d9b3d 0 30px,#47a947 30px 60px)}
+.track.turf .lname{color:#fff;text-shadow:0 1px 2px #000}
+.track.turf .lane{border-bottom-color:rgba(255,255,255,.5)}
+#htrack .lob{transform:none;mix-blend-mode:normal}
+.horse{display:inline-block;font-size:32px;line-height:40px;transform:scaleX(-1)}
+/* Arènes des jeux d'adresse */
+.arena{position:relative;height:360px;border-radius:14px;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.arena .hud{position:absolute;top:8px;left:10px;right:10px;display:flex;justify-content:space-between;font-family:var(--mono);font-weight:700;color:#fff;text-shadow:0 1px 3px #000;z-index:3}
+.arena .big{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-size:54px;font-weight:800;color:#fff;text-shadow:0 3px 0 #000;z-index:4;pointer-events:none}
+.forest{background:linear-gradient(180deg,#8fd3ff 0 55%,#3f8a2e 55%)}
+.forest .tree{position:absolute;left:50%;bottom:70px;width:70px;margin-left:-35px;background:repeating-linear-gradient(0deg,#7a4a22 0 14px,#6a3e1b 14px 28px);border-radius:8px 8px 0 0;transition:height .08s}
+.forest .tree::before{content:"";position:absolute;bottom:100%;left:-45px;width:160px;height:120px;background:radial-gradient(circle at 50% 70%,#2f7d32 0 45%,transparent 46%),radial-gradient(circle at 25% 80%,#2a6e2c 0 30%,transparent 31%),radial-gradient(circle at 75% 80%,#2a6e2c 0 30%,transparent 31%)}
+.forest .chips{position:absolute;left:0;right:0;bottom:70px;height:0}
+.forest .chip-w{position:absolute;width:10px;height:6px;background:#c9934f;border-radius:2px;animation:chipfly .6s ease-out forwards}
+@keyframes chipfly{to{transform:translate(var(--dx),-90px) rotate(400deg);opacity:0}}
+.forest .axes{position:absolute;left:0;right:0;bottom:8px;display:flex;gap:10px;padding:0 10px;z-index:3}
+.forest .axes button{flex:1;font:inherit;font-size:22px;font-weight:800;padding:16px 0;border-radius:14px;border:none;background:#ff7a1a;color:#fff;box-shadow:0 4px 0 #a84a00;cursor:pointer}
+.forest .axes button:active{transform:translateY(3px);box-shadow:0 1px 0 #a84a00}
+.forest .axes button.next-side{outline:4px solid #ffd21f}
+.range{background:linear-gradient(180deg,#5a3a20 0 12%,#c79a5a 12% 100%);cursor:crosshair}
+.range .target{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;display:grid;place-items:center;font-size:40px;border:none;background:none;cursor:crosshair;animation:pop .15s ease-out}
+.range .target img{width:50px;height:50px;object-fit:contain;mix-blend-mode:multiply}
+.range .target.gold img{filter:sepia(1) saturate(4) hue-rotate(5deg) brightness(1.15)}
+.range .boom{position:absolute;font-size:28px;pointer-events:none;animation:boom .5s ease-out forwards;z-index:2}
+@keyframes pop{from{transform:scale(.2)}to{transform:scale(1)}}
+@keyframes boom{to{transform:translateY(-30px) scale(1.4);opacity:0}}
+.quiz-q{font-family:var(--display);font-size:19px;line-height:1.25;text-wrap:balance}
+.quiz-a{display:grid;gap:8px}
+.quiz-a button{font:inherit;text-align:left;padding:12px;border-radius:12px;border:2px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.quiz-a button.good{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.quiz-a button.bad{background:var(--no);border-color:var(--no);color:var(--bg)}
 .round.on{background:var(--ok);border-color:var(--ok);color:var(--bg);font-weight:700}
 .pk-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 .pk-row input{width:72px;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px}

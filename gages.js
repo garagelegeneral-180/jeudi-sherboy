@@ -331,98 +331,109 @@ $("#slotgo").addEventListener("click", () => {
   }, reduce ? 50 * (i + 1) : 900 + i * 550));
 });
 
-/* ---------- La course de homards ---------- */
+/* ---------- Les courses : homards et chevaux (même moteur) ---------- */
 // [nom, chance de gagner, paiement] : environ 90 % redonné aux parieurs.
-const LOBS = [["Pince-Sans-Rire", 0.30, 3], ["Homer le Homard", 0.22, 4], ["Thermidor", 0.18, 5],
-  ["La Bisque", 0.14, 6.5], ["Capitaine Carapace", 0.10, 9], ["Lucky Pinces", 0.06, 15]];
+const RACES = {
+  homards: { label: "course de homards", box: "#racebox", track: "#track", result: "#raceresult", noun: "homard",
+    runner: () => `<img src="icons/sym-lob.png" alt="">`, lost: "Ton homard a mangé la poussière.",
+    list: [["Pince-Sans-Rire", 0.30, 3], ["Homer le Homard", 0.22, 4], ["Thermidor", 0.18, 5], ["La Bisque", 0.14, 6.5], ["Capitaine Carapace", 0.10, 9], ["Lucky Pinces", 0.06, 15]] },
+  chevaux: { label: "course de chevaux", box: "#horsebox", track: "#htrack", result: "#horseresult", noun: "cheval",
+    runner: () => `<span class="horse">🏇</span>`, lost: "Ton cheval est encore au paddock.",
+    list: [["Éclair de Sherbrooke", 0.30, 3], ["Pinte Express", 0.22, 4], ["Coup de Sabot", 0.18, 5], ["Ti-Galop", 0.14, 6.5], ["Tonnerre du Lac", 0.10, 9], ["Jument Jasette", 0.06, 15]] }
+};
+const LOBS = RACES.homards.list;
 const RACE_MS = 9000, COUNT_MS = 3000;
-let raceMise = 50, racePick = 0, raceAnim = null;
-const openRace = () => A().S.bets.find(b => b.type === "homards" && (b.status === "ouvert" || (b.status === "fini" && Date.now() < b.finishAt)));
-const lastRace = () => A().S.bets.find(b => b.type === "homards" && b.status === "fini");
+const raceState = { homards: { mise: 50, pick: 0, anim: null }, chevaux: { mise: 50, pick: 0, anim: null } };
+const openRaceOf = type => A().S.bets.find(b => b.type === type && (b.status === "ouvert" || (b.status === "fini" && Date.now() < b.finishAt)));
+const lastRaceOf = type => A().S.bets.find(b => b.type === type && b.status === "fini");
+const openRace = () => openRaceOf("homards"), lastRace = () => lastRaceOf("homards");
 function rng(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
-// Position (0 à 1) de chaque homard au temps t : même calcul sur tous les téléphones grâce à la graine.
-function racePlan(b) {
+// Position (0 à 1) de chaque coureur au temps t : même calcul sur tous les téléphones grâce à la graine.
+function racePlan(b, n) {
   const r = rng(b.seed);
-  return LOBS.map((_, i) => {
+  return Array.from({ length: n }, (_, i) => {
     const T = i === b.winner ? RACE_MS * 0.86 : RACE_MS * (0.89 + r() * 0.1);
     return { T, a: 0.06 + r() * 0.08, f: 2 + r() * 4, ph: r() * 6.28 };
   });
 }
 const posAt = (p, t) => { const u = Math.max(0, Math.min(1, t / p.T)); return Math.min(1, u + p.a * Math.sin(p.f * u * 6.28 + p.ph) * u * (1 - u)); };
-function drawTrack(b, t) {
-  const tr = $("#track"); const W = Math.max(120, tr.clientWidth - 40 - 40 - 30);   // départ 40 px, homard 40 px, arrêt au fil d'arrivée
+function drawTrackOf(type, b, t) {
+  const R = RACES[type], tr = $(R.track); const W = Math.max(120, tr.clientWidth - 40 - 40 - 30);   // départ, coureur, arrêt au fil
   if (!tr.dataset.built) {
-    tr.innerHTML = LOBS.map((l, i) => `<div class="lane" data-lane="${i}"><span class="lname">${i + 1}. ${l[0]} · ×${l[2]}</span><span class="bettors"></span><span class="lob"><img src="icons/sym-lob.png" alt="${l[0]}"></span></div>`).join("");
+    tr.innerHTML = R.list.map((l, i) => `<div class="lane" data-lane="${i}"><span class="lname">${i + 1}. ${l[0]} · ×${l[2]}</span><span class="bettors"></span><span class="lob">${R.runner()}</span></div>`).join("");
     tr.dataset.built = 1;
   }
-  const plan = b && b.seed ? racePlan(b) : null;
+  const plan = b && b.seed ? racePlan(b, R.list.length) : null;
   tr.querySelectorAll(".lane").forEach((ln, i) => {
     const x = plan && t > 0 ? posAt(plan[i], t) : 0;
     ln.querySelector(".lob").style.left = (36 + x * W) + "px";
     ln.classList.toggle("win", !!(b && b.status === "fini" && t >= RACE_MS && b.winner === i));
-    const who = b ? Object.entries(b.bets || {}).filter(([, v]) => v.lob === i).map(([id]) => A().avatar(A().byId[id] || { name: "?", color: "#888" })).join("") : "";
-    ln.querySelector(".bettors").innerHTML = who;
+    ln.querySelector(".bettors").innerHTML = b ? Object.entries(b.bets || {}).filter(([, v]) => v.lob === i).map(([id]) => A().avatar(A().byId[id] || { name: "?", color: "#888" })).join("") : "";
   });
   let cd = tr.querySelector(".countdown");
   if (b && b.status === "fini" && t < 0) { if (!cd) { cd = document.createElement("div"); cd.className = "countdown"; tr.appendChild(cd); } cd.textContent = Math.ceil(-t / 1000); }
   else if (cd) cd.remove();
 }
-function runRace(b) {
-  cancelAnimationFrame(raceAnim);
+const drawTrack = (b, t) => drawTrackOf("homards", b, t);
+function runRaceOf(type, b) {
+  const R = RACES[type], st = raceState[type];
+  cancelAnimationFrame(st.anim);
   const step = () => {
     const t = Date.now() - b.startAt;
-    drawTrack(b, t);
-    if (t < RACE_MS) { raceAnim = requestAnimationFrame(step); return; }
+    drawTrackOf(type, b, t);
+    if (t < RACE_MS) { st.anim = requestAnimationFrame(step); return; }
     const me = A().me, mine = (b.bets || {})[me];
-    $("#raceresult").textContent = `${LOBS[b.winner][0]} gagne la course!` + (mine ? (mine.lob === b.winner ? ` Tu ramasses ${J(Math.round(mine.mise * LOBS[b.winner][2]))}!` : " Ton homard a mangé la poussière.") : "");
+    $(R.result).textContent = `${R.list[b.winner][0]} gagne la course!` + (mine ? (mine.lob === b.winner ? ` Tu ramasses ${J(Math.round(mine.mise * R.list[b.winner][2]))}!` : " " + R.lost) : "");
     if (!animated.has("race" + b.id)) { animated.add("race" + b.id); if (mine && mine.lob === b.winner) confetti("big"); }
     renderLedger();
-    setTimeout(() => { if (!openRace()) $("#racebox").innerHTML = `<button class="btn primary" id="ropen">Nouvelle course</button>`; }, 400);
+    setTimeout(() => { if (!openRaceOf(type)) $(R.box).innerHTML = `<button class="btn primary" data-ropen="${type}">Nouvelle course</button>`; }, 400);
   };
   step();
 }
-function renderRace() {
-  const { me, esc } = A(); const b = openRace();
+function renderRaceOf(type) {
+  const { me, esc } = A(); const R = RACES[type], st = raceState[type], b = openRaceOf(type);
   let html = "";
   if (!b) {
-    html = `<button class="btn primary" id="ropen">Ouvrir une course</button>`;
-    const last = lastRace();
-    if (last && !raceAnim) { drawTrack(last, RACE_MS); $("#raceresult").textContent = `Dernière course : ${LOBS[last.winner][0]} a gagné.`; }
-    else if (!last) drawTrack(null, 0);
+    html = `<button class="btn primary" data-ropen="${type}">Ouvrir une course</button>`;
+    const last = lastRaceOf(type);
+    if (last && !st.anim) { drawTrackOf(type, last, RACE_MS); $(R.result).textContent = `Dernière course : ${R.list[last.winner][0]} a gagné.`; }
+    else if (!last) drawTrackOf(type, null, 0);
   } else if (b.status === "ouvert") {
     const mine = (b.bets || {})[me];
-    if (mine) { racePick = mine.lob; }
+    if (mine) st.pick = mine.lob;
     const n = Object.keys(b.bets || {}).length;
-    if (b.by !== me && !mine) yourTurn("inv" + b.id, `${nm(b.by)} ouvre une course de homards!`, "Choisis ton homard dans l'onglet Casino.");
-    html = `<div class="sub">Course ouverte par ${esc(nm(b.by))} · ${n} parieur${n > 1 ? "s" : ""}. Choisis ton homard :</div>
-      <div class="picklob">${LOBS.map((l, i) => `<button data-lob="${i}" class="${i === racePick ? "next" : ""}"><span>${i + 1}. ${l[0]}</span><b>×${l[2]}</b></button>`).join("")}</div>
-      <div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(raceMise, "rm")}</div>
-      <div class="row2"><button class="btn primary" id="rbet">${mine ? "Changer mon pari" : "Je parie"} ${raceMise} jetons sur ${LOBS[racePick][0]}</button>
-      ${mine ? `<button class="toggle" id="runbet">Retirer mon pari</button>` : ""}
-      ${(b.by === me || mine) && n >= 1 ? `<button class="btn hot" id="rgo">Départ!</button>` : ""}
-      ${b.by === me ? `<button class="toggle" id="rcancel">Annuler</button>` : ""}</div>`;
-    drawTrack(b, 0); $("#raceresult").textContent = "";
+    if (b.by !== me && !mine) yourTurn("inv" + b.id, `${nm(b.by)} ouvre une ${R.label}!`, `Choisis ton ${R.noun} dans l'onglet Casino.`);
+    html = `<div class="sub">Course ouverte par ${esc(nm(b.by))} · ${n} parieur${n > 1 ? "s" : ""}. Choisis ton ${R.noun} :</div>
+      <div class="picklob">${R.list.map((l, i) => `<button data-lob="${i}" class="${i === st.pick ? "next" : ""}"><span>${i + 1}. ${l[0]}</span><b>×${l[2]}</b></button>`).join("")}</div>
+      <div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(st.mise, "rm")}</div>
+      <div class="row2"><button class="btn primary" data-rbet="1">${mine ? "Changer mon pari" : "Je parie"} ${st.mise} jetons sur ${R.list[st.pick][0]}</button>
+      ${mine ? `<button class="toggle" data-runbet="1">Retirer mon pari</button>` : ""}
+      ${(b.by === me || mine) && n >= 1 ? `<button class="btn hot" data-rgo="1">Départ!</button>` : ""}
+      ${b.by === me ? `<button class="toggle" data-rcancel="1">Annuler</button>` : ""}</div>`;
+    drawTrackOf(type, b, 0); $(R.result).textContent = "";
   } else {
-    html = `<div class="sub">Course en cours! Regarde ton homard.</div>`;
-    runRace(b);
+    html = `<div class="sub">Course en cours! Regarde ton ${R.noun}.</div>`;
+    runRaceOf(type, b);
   }
-  $("#racebox").innerHTML = html;
+  $(R.box).innerHTML = html;
 }
-$("#racebox").addEventListener("click", e => {
-  const { me } = A(); const t = e.target.closest("button"); if (!t) return;
-  if (t.dataset.rm) { raceMise = +t.dataset.rm; return renderRace(); }
-  if (t.dataset.lob) { racePick = +t.dataset.lob; return renderRace(); }
-  if (t.id === "ropen") { if (needPresent()) return;
-    return tx("bets", newId(), () => ({ type: "homards", week: A().WEEK, status: "ouvert", by: me, bets: {}, created: Date.now() }), "Course ouverte. Les autres peuvent parier."); }
-  const b = openRace(); if (!b || b.status !== "ouvert") return;
-  if (t.id === "rbet") { if (needPresent()) return; const pick = racePick, mise = raceMise;
-    tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, bets: { ...(cur.bets || {}), [me]: { lob: pick, mise } } } : undefined, `Pari placé sur ${LOBS[pick][0]}!`); }
-  if (t.id === "runbet") tx("bets", b.id, cur => { if (!cur || cur.status !== "ouvert") return undefined; const bets = { ...(cur.bets || {}) }; delete bets[me]; return { ...cur, bets }; });
-  if (t.id === "rcancel") tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, status: "annule" } : undefined, "Course annulée");
-  if (t.id === "rgo") tx("bets", b.id, cur => {
+const renderRace = () => { renderRaceOf("homards"); renderRaceOf("chevaux"); };
+for (const type of Object.keys(RACES)) $(RACES[type].box).addEventListener("click", e => {
+  const { me } = A(); const t = e.target.closest("button"); if (!t) return; const R = RACES[type], st = raceState[type];
+  if (t.dataset.rm) { st.mise = +t.dataset.rm; return renderRaceOf(type); }
+  if (t.dataset.lob) { st.pick = +t.dataset.lob; return renderRaceOf(type); }
+  if (t.dataset.ropen) { if (needPresent()) return;
+    return tx("bets", newId(), () => ({ type, week: A().WEEK, status: "ouvert", by: me, bets: {}, created: Date.now() }), "Course ouverte. Les autres peuvent parier."); }
+  const b = openRaceOf(type); if (!b || b.status !== "ouvert") return;
+  if (t.dataset.rbet) { if (needPresent()) return; const pick = st.pick, mise = st.mise;
+    tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, bets: { ...(cur.bets || {}), [me]: { lob: pick, mise } } } : undefined, `Pari placé sur ${R.list[pick][0]}!`); }
+  if (t.dataset.runbet) tx("bets", b.id, cur => { if (!cur || cur.status !== "ouvert") return undefined; const bets = { ...(cur.bets || {}) }; delete bets[me]; return { ...cur, bets }; });
+  if (t.dataset.rcancel) tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, status: "annule" } : undefined, "Course annulée");
+  if (t.dataset.rgo) tx("bets", b.id, cur => {
     if (!cur || cur.status !== "ouvert" || !Object.keys(cur.bets || {}).length) return undefined;
     const a = new Uint32Array(2); crypto.getRandomValues(a);
-    let r = a[0] / 4294967296, winner = 0; for (let i = 0; i < LOBS.length; i++) { if (r < LOBS[i][1]) { winner = i; break; } r -= LOBS[i][1]; winner = i; }
+    let r = a[0] / 4294967296, winner = R.list.length - 1;
+    for (let i = 0; i < R.list.length; i++) { if (r < R.list[i][1]) { winner = i; break; } r -= R.list[i][1]; }
     const startAt = Date.now() + COUNT_MS;
     return { ...cur, status: "fini", winner, seed: a[1] || 7, startAt, finishAt: startAt + RACE_MS };
   });
@@ -583,6 +594,207 @@ $("#plkgo").addEventListener("click", () => {
   })(t0);
 });
 
+/* ---------- Défis d'adresse : bûcheron et tir (même moteur) ---------- */
+// Quelqu'un ouvre un défi, les autres s'inscrivent, chacun joue sur son téléphone. Le meilleur score ramasse le pot.
+const DEFIS_A = {
+  bucheron: { label: "concours de bûcheron", box: "#lumberbox", arena: "#lumberarena", unit: "coups", play: playLumber },
+  tir: { label: "tir aux canettes", box: "#tirbox", arena: "#tirarena", unit: "points", play: playTir }
+};
+const defiMise = { bucheron: 50, tir: 50 };
+let playing = null;
+const openDefi = g => A().S.bets.find(b => b.type === "defi" && b.game === g && b.status === "ouvert");
+const lastDefi = g => A().S.bets.find(b => b.type === "defi" && b.game === g && b.status === "fini");
+function resolveDefi(b) {
+  if (b.players.length < 2 || !b.players.every(p => b.scores && b.scores[p] != null)) return undefined;
+  const top = Math.max(...b.players.map(p => b.scores[p])), winners = b.players.filter(p => b.scores[p] === top);
+  return { ...b, status: "fini", winners, finishedAt: Date.now() };
+}
+function renderDefi(g) {
+  const { me, esc } = A(); const D2 = DEFIS_A[g], b = openDefi(g), last = lastDefi(g);
+  if (playing === g) return;
+  let html;
+  if (!b) {
+    html = `<div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(defiMise[g], "dm-" + g)}</div>
+      <div class="row2"><button class="btn primary" data-dopen="${g}">Lancer un défi à ${defiMise[g]} jetons</button><button class="toggle" data-dprac="${g}">Pratique (sans mise)</button></div>`;
+    if (last) html += `<div class="note">Dernier défi : ${last.winners.map(nm).join(" et ")} avec ${Math.max(...Object.values(last.scores))} ${D2.unit}. ${last.players.map(p => `${esc(nm(p))} ${last.scores[p]}`).join(" · ")}</div>`;
+  } else {
+    const joined = b.players.includes(me), done = b.scores && b.scores[me] != null;
+    if (!joined && b.by !== me) yourTurn("inv" + b.id, `${nm(b.by)} te lance un défi : ${D2.label}!`, `Mise : ${b.mise} jetons. Inscris-toi dans l'onglet Casino.`);
+    html = `<div class="sub">Défi lancé par ${esc(nm(b.by))} : <b>${b.mise} jetons</b> chacun. Pot : <b>${J(b.mise * b.players.length)}</b>.</div>
+      <div class="rounds">${b.players.map(p => `<span class="round ${b.scores && b.scores[p] != null ? "on" : ""}">${esc(nm(p))}${b.scores && b.scores[p] != null ? " · " + b.scores[p] : " · à jouer"}</span>`).join("")}</div>
+      <div class="row2">${!joined ? `<button class="btn primary" data-djoin="${g}">Je m'inscris (${b.mise} jetons)</button>` : ""}
+      ${joined && !done ? `<button class="btn hot" data-dplay="${g}">À moi de jouer!</button>` : ""}
+      ${joined && !done && !Object.keys(b.scores || {}).length ? `<button class="toggle" data-dleave="${g}">Me retirer</button>` : ""}
+      ${b.by === me ? `<button class="toggle" data-dclose="${g}">${Object.keys(b.scores || {}).length >= 2 ? "Terminer avec ceux qui ont joué" : "Annuler"}</button>` : ""}</div>
+      ${joined && !done ? "" : `<div class="note">${done ? "Ton score est enregistré. On attend les autres." : ""}</div>`}`;
+    if (joined && !done) yourTurn("play" + b.id, `À toi de jouer : ${D2.label}!`, "Les autres attendent ton score.");
+    const r = resolveDefi(b); if (r) tx("bets", b.id, cur => cur && cur.status === "ouvert" ? resolveDefi(cur) : undefined);
+  }
+  if (last && !animated.has("defi" + last.id) && Date.now() - last.finishedAt < 30000) { animated.add("defi" + last.id); if (last.winners.includes(me)) { confetti("big"); A().toast(`Tu gagnes le ${D2.label}!`); } }
+  $(D2.box).innerHTML = html;
+}
+function startPlay(g, onScore) {
+  playing = g; const D2 = DEFIS_A[g], ar = $(D2.arena); ar.hidden = false; ar.scrollIntoView({ block: "center", behavior: "smooth" });
+  $(D2.box).innerHTML = `<div class="note">C'est parti! Donne tout.</div>`;
+  let n = 3; ar.innerHTML = `<div class="big">3</div>`;
+  const cd = setInterval(() => { n--; if (n > 0) ar.querySelector(".big").textContent = n; else { clearInterval(cd); D2.play(ar, score => { playing = null; onScore(score); setTimeout(() => { ar.hidden = true; renderDefi(g); }, 1800); }); } }, 700);
+}
+for (const g of Object.keys(DEFIS_A)) $(DEFIS_A[g].box).addEventListener("click", e => {
+  const { me } = A(); const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset["dm-" + g] !== undefined || t.getAttribute("data-dm-" + g)) { defiMise[g] = +t.getAttribute("data-dm-" + g); return renderDefi(g); }
+  if (t.dataset.dprac) return startPlay(g, sc => A().toast(`Pratique : ${sc} ${DEFIS_A[g].unit}`));
+  if (t.dataset.dopen) { if (needPresent()) return;
+    return tx("bets", newId(), () => ({ type: "defi", game: g, week: A().WEEK, status: "ouvert", mise: defiMise[g], players: [me], scores: {}, by: me, created: Date.now() }), "Défi lancé! Les autres peuvent s'inscrire."); }
+  const b = openDefi(g); if (!b) return;
+  if (t.dataset.djoin) { if (needPresent()) return; tx("bets", b.id, cur => cur && cur.status === "ouvert" && !cur.players.includes(me) ? { ...cur, players: [...cur.players, me] } : undefined, "Inscrit au défi!"); }
+  if (t.dataset.dleave) tx("bets", b.id, cur => cur ? { ...cur, players: cur.players.filter(p => p !== me) } : undefined);
+  if (t.dataset.dclose) tx("bets", b.id, cur => {
+    if (!cur || cur.status !== "ouvert") return undefined;
+    const played = cur.players.filter(p => cur.scores && cur.scores[p] != null);
+    if (played.length < 2) return { ...cur, status: "annule" };
+    return resolveDefi({ ...cur, players: played });
+  });
+  if (t.dataset.dplay) startPlay(g, score => tx("bets", b.id, cur => {
+    if (!cur || cur.status !== "ouvert" || !cur.players.includes(me) || (cur.scores || {})[me] != null) return undefined;
+    const next = { ...cur, scores: { ...(cur.scores || {}), [me]: score } };
+    return resolveDefi(next) || next;
+  }, `Score enregistré : ${score}`));
+});
+
+/* Bûcheron : alterner gauche et droite pendant 10 secondes */
+function playLumber(ar, done) {
+  let hits = 0, next = "g", left = 10, maxH = 230;
+  ar.innerHTML = `<div class="hud"><span>🪓 <b id="lhits">0</b> coups</span><span>⏱ <b id="ltime">10</b> s</span></div>
+    <div class="tree" style="height:${maxH}px"></div><div class="chips"></div>
+    <div class="axes"><button data-side="g" class="next-side">◀ Hache</button><button data-side="d">Hache ▶</button></div>`;
+  const tree = ar.querySelector(".tree"), chips = ar.querySelector(".chips");
+  const onHit = e => {
+    const b = e.target.closest("[data-side]"); if (!b || left <= 0) return; e.preventDefault();
+    if (b.dataset.side !== next) { navigator.vibrate?.(60); return; }   // même côté deux fois : ça ne compte pas
+    hits++; next = next === "g" ? "d" : "g"; navigator.vibrate?.(8);
+    ar.querySelector("#lhits").textContent = hits;
+    ar.querySelectorAll("[data-side]").forEach(x => x.classList.toggle("next-side", x.dataset.side === next));
+    tree.style.height = Math.max(20, maxH - hits * 2.2) + "px";
+    const c = document.createElement("i"); c.className = "chip-w"; c.style.left = (50 + (b.dataset.side === "g" ? -8 : 8)) + "%"; c.style.setProperty("--dx", (b.dataset.side === "g" ? -1 : 1) * (30 + Math.random() * 60) + "px");
+    chips.appendChild(c); setTimeout(() => c.remove(), 650);
+  };
+  ar.addEventListener("pointerdown", onHit);
+  const timer = setInterval(() => {
+    left--; ar.querySelector("#ltime").textContent = left;
+    if (left <= 0) { clearInterval(timer); ar.removeEventListener("pointerdown", onHit);
+      ar.insertAdjacentHTML("beforeend", `<div class="big">${hits >= 60 ? "TIMBER!" : hits} </div>`); done(hits); }
+  }, 1000);
+}
+
+/* Tir aux canettes : 20 secondes */
+function playTir(ar, done) {
+  let score = 0, left = 20, live = true;
+  ar.innerHTML = `<div class="hud"><span>🎯 <b id="tscore">0</b> points</span><span>⏱ <b id="ttime">20</b> s</span></div>`;
+  const spawn = () => {
+    if (!live) return;
+    const r = Math.random(), kind = r < 0.12 ? "gold" : r < 0.27 ? "shroom" : "can";
+    const el = document.createElement("button"); el.className = "target " + (kind === "gold" ? "gold" : "");
+    el.innerHTML = kind === "shroom" ? `<img src="icons/sym-shroom.png" alt="Amanite">` : `<img src="icons/sym-beer.png" alt="Canette">`;
+    el.style.left = (12 + Math.random() * 76) + "%"; el.style.top = (22 + Math.random() * 68) + "%"; el.dataset.kind = kind;
+    ar.appendChild(el);
+    setTimeout(() => el.remove(), kind === "gold" ? 650 : 950);
+    setTimeout(spawn, 280 + Math.random() * 380);
+  };
+  const shoot = e => {
+    const t = e.target.closest(".target"); if (!t || !live) return; e.preventDefault();
+    const pts = t.dataset.kind === "gold" ? 3 : t.dataset.kind === "shroom" ? -2 : 1;
+    score = Math.max(0, score + pts); ar.querySelector("#tscore").textContent = score; navigator.vibrate?.(pts > 0 ? 15 : 80);
+    const b = document.createElement("span"); b.className = "boom"; b.textContent = pts > 0 ? `💥+${pts}` : "🍄-2"; b.style.left = t.style.left; b.style.top = t.style.top;
+    ar.appendChild(b); setTimeout(() => b.remove(), 520); t.remove();
+  };
+  ar.addEventListener("pointerdown", shoot);
+  spawn();
+  const timer = setInterval(() => {
+    left--; ar.querySelector("#ttime").textContent = left;
+    if (left <= 0) { clearInterval(timer); live = false; ar.removeEventListener("pointerdown", shoot); ar.querySelectorAll(".target").forEach(x => x.remove());
+      ar.insertAdjacentHTML("beforeend", `<div class="big">${score} pts</div>`); done(score); }
+  }, 1000);
+}
+
+/* ---------- Quiz geek : solo contre la banque ---------- */
+const QUIZ = [
+  ["Dans Star Wars, quelle est la planète natale de Luke Skywalker?", ["Tatooine", "Hoth", "Naboo", "Endor"]],
+  ["Que veut dire « HTML »?", ["HyperText Markup Language", "High Tech Modern Language", "Hyper Transfer Mail Link", "Home Tool Markup Language"]],
+  ["Quel plombier moustachu est la mascotte de Nintendo?", ["Mario", "Luigi", "Wario", "Toad"]],
+  ["Combien de bits dans un octet?", ["8", "4", "16", "10"]],
+  ["Quelle est la plus grosse planète du système solaire?", ["Jupiter", "Saturne", "Neptune", "La Terre"]],
+  ["Dans Le Seigneur des anneaux, qui porte l'anneau jusqu'au Mordor?", ["Frodon", "Gandalf", "Aragorn", "Legolas"]],
+  ["Quel langage est surtout utilisé pour animer les pages web dans le navigateur?", ["JavaScript", "COBOL", "Fortran", "Pascal"]],
+  ["Dans Minecraft, quelle créature verte explose quand elle s'approche?", ["Le Creeper", "Le Zombie", "L'Enderman", "Le Squelette"]],
+  ["Qui a fondé Microsoft avec Paul Allen?", ["Bill Gates", "Steve Jobs", "Elon Musk", "Mark Zuckerberg"]],
+  ["Quel est le symbole chimique de l'or?", ["Au", "Or", "Ag", "Go"]],
+  ["Dans Star Trek, quel est le prénom du capitaine Kirk?", ["James", "Jean-Luc", "William", "Benjamin"]],
+  ["Quel jeu vidéo met en vedette un hérisson bleu très rapide?", ["Sonic", "Crash Bandicoot", "Spyro", "Rayman"]],
+  ["En binaire, combien vaut 1010?", ["10", "12", "5", "1010"]],
+  ["Quelle mission a posé les premiers humains sur la Lune en 1969?", ["Apollo 11", "Apollo 13", "Gemini 4", "Artemis 1"]],
+  ["Dans Retour vers le futur, à quelle vitesse la DeLorean voyage dans le temps?", ["88 milles à l'heure", "100 milles à l'heure", "65 milles à l'heure", "120 milles à l'heure"]],
+  ["Qui a créé le système d'exploitation Linux?", ["Linus Torvalds", "Richard Stallman", "Ken Thompson", "Tim Berners-Lee"]],
+  ["Dans Pac-Man, combien de fantômes poursuivent Pac-Man?", ["4", "3", "5", "6"]],
+  ["Quel super-héros est aussi Bruce Wayne?", ["Batman", "Superman", "Iron Man", "Spider-Man"]],
+  ["Quelle est l'étoile la plus proche de la Terre?", ["Le Soleil", "Proxima du Centaure", "Sirius", "L'étoile polaire"]],
+  ["Dans The Legend of Zelda, comment s'appelle le héros?", ["Link", "Zelda", "Ganon", "Epona"]],
+  ["Que signifie « CPU »?", ["Central Processing Unit", "Computer Power Unit", "Central Program Utility", "Core Personal Unit"]],
+  ["Dans Matrix, quelle pilule Neo avale-t-il?", ["La rouge", "La bleue", "La verte", "Aucune"]],
+  ["Quel est le jeu vidéo de blocs qui tombent, créé en URSS en 1984?", ["Tetris", "Pong", "Breakout", "Space Invaders"]],
+  ["Combien de lunes a la planète Mars?", ["2", "1", "0", "4"]],
+  ["Dans Harry Potter, quel est le nom de la chouette d'Harry?", ["Hedwige", "Croûtard", "Buck", "Pattenrond"]],
+  ["Quelle compagnie fabrique les consoles PlayStation?", ["Sony", "Nintendo", "Microsoft", "Sega"]],
+  ["Quel nombre est la « réponse à la grande question » dans Le Guide du voyageur galactique?", ["42", "7", "13", "100"]],
+  ["Quel animal est la mascotte de Linux?", ["Un manchot", "Un renard", "Un éléphant", "Un hibou"]],
+  ["Dans Star Wars, qui dit « Je suis ton père »?", ["Dark Vador", "Yoda", "Obi-Wan Kenobi", "L'Empereur"]],
+  ["Quelle unité mesure la fréquence d'un processeur?", ["Le hertz", "Le watt", "L'octet", "Le volt"]]
+];
+const QUIZ_PAY = [0, 0, 0, 1, 2, 4];
+let quizMise = 25, quiz = null;
+function renderQuiz() {
+  const box = $("#quizbox");
+  if (!quiz) {
+    box.innerHTML = `<div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(quizMise, "qm")}</div>
+      <button class="btn primary" data-qstart="1">Commencer le quiz (${quizMise} jetons)</button>`;
+    return;
+  }
+  const q = quiz.qs[quiz.i];
+  if (!q) {
+    const gain = quizMise * QUIZ_PAY[quiz.score];
+    box.innerHTML = `<div class="quiz-q">${quiz.score} sur 5!</div><div class="result">${gain > quizMise ? `Tu ramasses ${J(gain)}!` : gain === quizMise ? "Mise remboursée." : "La banque garde ta mise. Révise ton Star Wars!"}</div>
+      <button class="btn primary" data-qagain="1">Rejouer</button>`;
+    return;
+  }
+  box.innerHTML = `<div class="note">Question ${quiz.i + 1} sur 5 · ${quiz.score} bonne${quiz.score > 1 ? "s" : ""} réponse${quiz.score > 1 ? "s" : ""}</div>
+    <div class="quiz-q">${A().esc(q.t)}</div>
+    <div class="quiz-a">${q.opts.map((o, i) => `<button data-qa="${i}">${A().esc(o)}</button>`).join("")}</div>`;
+}
+$("#quizbox").addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.qm) { quizMise = +t.dataset.qm; return renderQuiz(); }
+  if (t.dataset.qagain) { quiz = null; return renderQuiz(); }
+  if (t.dataset.qstart) {
+    if (needPresent()) return;
+    const pool = QUIZ.map((q, i) => i).sort(() => Math.random() - 0.5).slice(0, 5);
+    quiz = { i: 0, score: 0, qs: pool.map(i => { const [t2, ans] = QUIZ[i]; const opts = ans.slice().sort(() => Math.random() - 0.5); return { t: t2, opts, good: opts.indexOf(ans[0]) }; }) };
+    return renderQuiz();
+  }
+  if (t.dataset.qa != null && quiz && !quiz.lock) {
+    const q = quiz.qs[quiz.i], pick = +t.dataset.qa; quiz.lock = true;
+    document.querySelectorAll("#quizbox [data-qa]").forEach((b, i) => { if (i === q.good) b.classList.add("good"); else if (i === pick) b.classList.add("bad"); });
+    if (pick === q.good) quiz.score++; else navigator.vibrate?.(60);
+    setTimeout(() => {
+      quiz.lock = false; quiz.i++;
+      if (quiz.i >= 5) {
+        const gain = quizMise * QUIZ_PAY[quiz.score];
+        tx("bets", newId(), () => ({ type: "quiz", by: A().me, mise: quizMise, gain, score: quiz.score, week: A().WEEK, status: "fini", created: Date.now() }));
+        if (quiz.score === 5) confetti("big");
+      }
+      renderQuiz();
+    }, 900);
+  }
+});
+
 /* ---------- Classement ---------- */
 function renderLedger() {
   const { esc, MEMBERS, shortDate } = A(); const bets = A().S.bets;
@@ -592,11 +804,11 @@ function renderLedger() {
   for (const b of bets) {
     if (b.status !== "fini" || b.created < resetAt) continue;
     if (b.type === "roue" || b.type === "des") { b.players.forEach(p => net[p] -= b.mise); net[b.winner] += b.mise * b.players.length; hist.push(`${b.type === "roue" ? "Roue" : "Dés"} : ${nm(b.winner)} +${J(b.mise * (b.players.length - 1))}`); }
-    else if (b.type === "homards") {
+    else if (RACES[b.type]) {
       if (Date.now() < b.finishAt) continue;   // pas de spoiler avant l'arrivée
-      let best = null;
-      for (const [id, v] of Object.entries(b.bets || {})) { const g = v.lob === b.winner ? Math.round(v.mise * LOBS[b.winner][2]) : 0; net[id] = (net[id] || 0) + g - v.mise; if (g && (!best || g > best.g)) best = { id, g: g - v.mise }; }
-      hist.push(`Homards : ${LOBS[b.winner][0]} gagne${best ? ` · ${nm(best.id)} +${J(best.g)}` : ""}`);
+      const L = RACES[b.type].list; let best = null;
+      for (const [id, v] of Object.entries(b.bets || {})) { const g = v.lob === b.winner ? Math.round(v.mise * L[b.winner][2]) : 0; net[id] = (net[id] || 0) + g - v.mise; if (g && (!best || g > best.g)) best = { id, g: g - v.mise }; }
+      hist.push(`${b.type === "homards" ? "Homards" : "Chevaux"} : ${L[b.winner][0]} gagne${best ? ` · ${nm(best.id)} +${J(best.g)}` : ""}`);
     }
     else if (b.type === "roulette") {
       if (Date.now() < b.finishAt) continue;
@@ -604,6 +816,12 @@ function renderLedger() {
       for (const [id, list] of Object.entries(b.bets || {})) { const d = rouGain(list, b.result) - rouStake(list); net[id] = (net[id] || 0) + d; if (d > 0 && (!best || d > best.d)) best = { id, d }; }
       hist.push(`Roulette : ${b.result} ${colorOf(b.result)}${best ? ` · ${nm(best.id)} +${J(best.d)}` : ""}`);
     }
+    else if (b.type === "defi") {
+      const pot = b.mise * b.players.length, share = Math.floor(pot / b.winners.length);
+      b.players.forEach(p => net[p] = (net[p] || 0) - b.mise); b.winners.forEach(w => net[w] = (net[w] || 0) + share);
+      hist.push(`${b.game === "tir" ? "Tir" : "Bûcheron"} : ${b.winners.map(nm).join(" et ")} +${J(share - b.mise)}`);
+    }
+    else if (b.type === "quiz") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.score === 5) hist.push(`Quiz geek : ${nm(b.by)} 5 sur 5!`); else continue; }
     else if (b.type === "plinko") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.gain >= b.mise * 11) hist.push(`Plinko : ${nm(b.by)} +${J(b.gain - b.mise)}`); else continue; }
     else if (b.type === "slot") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.gain >= b.mise * 10) hist.push(`Slots : ${nm(b.by)} +${J(b.gain - b.mise)}`); else continue; }
     else if (b.type === "poker") { const ids = new Set([...Object.keys(b.buyins || {}), ...Object.keys(b.finals || {})]);
@@ -626,9 +844,9 @@ $("#settledone").addEventListener("click", () => {
   confirmReset = false; tx("bets", newId(), () => ({ type: "zero", status: "fini", by: A().me, created: Date.now() }), "Tous les comptes sont revenus à 1 000 jetons");
 });
 
-function render() { if (!window.JSAPI) return; renderSlotStatic(); renderPlinkoStatic(); renderRou(); renderRace(); renderWheel(); renderDice(); renderLedger(); }
+function render() { if (!window.JSAPI) return; renderSlotStatic(); renderPlinkoStatic(); renderRou(); renderRace(); renderDefi("bucheron"); renderDefi("tir"); if (!quiz) renderQuiz(); renderWheel(); renderDice(); renderLedger(); }
 window.Gages = { render, renderPoker };
 // En ouvrant l'onglet Gages, on redessine la piste à la bonne largeur.
 document.querySelector('nav.tabs [data-t="gages"]')?.addEventListener("click", () => setTimeout(() => { render(); renderPoker(); }, 30));
-addEventListener("resize", () => { const b = openRace() || lastRace(); if (b && !raceAnim) drawTrack(b, b.status === "fini" ? RACE_MS : 0); });
+addEventListener("resize", () => { for (const type of Object.keys(RACES)) { const b = openRaceOf(type) || lastRaceOf(type); if (b && !raceState[type].anim) drawTrackOf(type, b, b.status === "fini" ? RACE_MS : 0); } });
 render(); renderPoker();
