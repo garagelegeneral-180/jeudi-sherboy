@@ -331,6 +331,103 @@ $("#slotgo").addEventListener("click", () => {
   }, reduce ? 50 * (i + 1) : 900 + i * 550));
 });
 
+/* ---------- La course de homards ---------- */
+// [nom, chance de gagner, paiement] : environ 90 % redonné aux parieurs.
+const LOBS = [["Pince-Sans-Rire", 0.30, 3], ["Homer le Homard", 0.22, 4], ["Thermidor", 0.18, 5],
+  ["La Bisque", 0.14, 6.5], ["Capitaine Carapace", 0.10, 9], ["Lucky Pinces", 0.06, 15]];
+const RACE_MS = 9000, COUNT_MS = 3000;
+let raceMise = 50, racePick = 0, raceAnim = null;
+const openRace = () => A().S.bets.find(b => b.type === "homards" && (b.status === "ouvert" || (b.status === "fini" && Date.now() < b.finishAt)));
+const lastRace = () => A().S.bets.find(b => b.type === "homards" && b.status === "fini");
+function rng(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+// Position (0 à 1) de chaque homard au temps t : même calcul sur tous les téléphones grâce à la graine.
+function racePlan(b) {
+  const r = rng(b.seed);
+  return LOBS.map((_, i) => {
+    const T = i === b.winner ? RACE_MS * 0.86 : RACE_MS * (0.89 + r() * 0.1);
+    return { T, a: 0.06 + r() * 0.08, f: 2 + r() * 4, ph: r() * 6.28 };
+  });
+}
+const posAt = (p, t) => { const u = Math.max(0, Math.min(1, t / p.T)); return Math.min(1, u + p.a * Math.sin(p.f * u * 6.28 + p.ph) * u * (1 - u)); };
+function drawTrack(b, t) {
+  const tr = $("#track"); const W = Math.max(120, tr.clientWidth - 40 - 40 - 30);   // départ 40 px, homard 40 px, arrêt au fil d'arrivée
+  if (!tr.dataset.built) {
+    tr.innerHTML = LOBS.map((l, i) => `<div class="lane" data-lane="${i}"><span class="lname">${i + 1}. ${l[0]} · ×${l[2]}</span><span class="bettors"></span><span class="lob"><img src="icons/sym-lob.png" alt="${l[0]}"></span></div>`).join("");
+    tr.dataset.built = 1;
+  }
+  const plan = b && b.seed ? racePlan(b) : null;
+  tr.querySelectorAll(".lane").forEach((ln, i) => {
+    const x = plan && t > 0 ? posAt(plan[i], t) : 0;
+    ln.querySelector(".lob").style.left = (36 + x * W) + "px";
+    ln.classList.toggle("win", !!(b && b.status === "fini" && t >= RACE_MS && b.winner === i));
+    const who = b ? Object.entries(b.bets || {}).filter(([, v]) => v.lob === i).map(([id]) => A().avatar(A().byId[id] || { name: "?", color: "#888" })).join("") : "";
+    ln.querySelector(".bettors").innerHTML = who;
+  });
+  let cd = tr.querySelector(".countdown");
+  if (b && b.status === "fini" && t < 0) { if (!cd) { cd = document.createElement("div"); cd.className = "countdown"; tr.appendChild(cd); } cd.textContent = Math.ceil(-t / 1000); }
+  else if (cd) cd.remove();
+}
+function runRace(b) {
+  cancelAnimationFrame(raceAnim);
+  const step = () => {
+    const t = Date.now() - b.startAt;
+    drawTrack(b, t);
+    if (t < RACE_MS) { raceAnim = requestAnimationFrame(step); return; }
+    const me = A().me, mine = (b.bets || {})[me];
+    $("#raceresult").textContent = `${LOBS[b.winner][0]} gagne la course!` + (mine ? (mine.lob === b.winner ? ` Tu ramasses ${J(Math.round(mine.mise * LOBS[b.winner][2]))}!` : " Ton homard a mangé la poussière.") : "");
+    if (!animated.has("race" + b.id)) { animated.add("race" + b.id); if (mine && mine.lob === b.winner) confetti("big"); }
+    renderLedger();
+    setTimeout(() => { if (!openRace()) $("#racebox").innerHTML = `<button class="btn primary" id="ropen">Nouvelle course</button>`; }, 400);
+  };
+  step();
+}
+function renderRace() {
+  const { me, esc } = A(); const b = openRace();
+  let html = "";
+  if (!b) {
+    html = `<button class="btn primary" id="ropen">Ouvrir une course</button>`;
+    const last = lastRace();
+    if (last && !raceAnim) { drawTrack(last, RACE_MS); $("#raceresult").textContent = `Dernière course : ${LOBS[last.winner][0]} a gagné.`; }
+    else if (!last) drawTrack(null, 0);
+  } else if (b.status === "ouvert") {
+    const mine = (b.bets || {})[me];
+    if (mine) { racePick = mine.lob; }
+    const n = Object.keys(b.bets || {}).length;
+    if (b.by !== me && !mine) yourTurn("inv" + b.id, `${nm(b.by)} ouvre une course de homards!`, "Choisis ton homard dans l'onglet Gages.");
+    html = `<div class="sub">Course ouverte par ${esc(nm(b.by))} · ${n} parieur${n > 1 ? "s" : ""}. Choisis ton homard :</div>
+      <div class="picklob">${LOBS.map((l, i) => `<button data-lob="${i}" class="${i === racePick ? "next" : ""}"><span>${i + 1}. ${l[0]}</span><b>×${l[2]}</b></button>`).join("")}</div>
+      <div class="row2" style="align-items:center"><span class="note">Mise</span>${miseButtons(raceMise, "rm")}</div>
+      <div class="row2"><button class="btn primary" id="rbet">${mine ? "Changer mon pari" : "Je parie"} ${raceMise} jetons sur ${LOBS[racePick][0]}</button>
+      ${mine ? `<button class="toggle" id="runbet">Retirer mon pari</button>` : ""}
+      ${(b.by === me || mine) && n >= 1 ? `<button class="btn hot" id="rgo">Départ!</button>` : ""}
+      ${b.by === me ? `<button class="toggle" id="rcancel">Annuler</button>` : ""}</div>`;
+    drawTrack(b, 0); $("#raceresult").textContent = "";
+  } else {
+    html = `<div class="sub">Course en cours! Regarde ton homard.</div>`;
+    runRace(b);
+  }
+  $("#racebox").innerHTML = html;
+}
+$("#racebox").addEventListener("click", e => {
+  const { me } = A(); const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.rm) { raceMise = +t.dataset.rm; return renderRace(); }
+  if (t.dataset.lob) { racePick = +t.dataset.lob; return renderRace(); }
+  if (t.id === "ropen") { if (needPresent()) return;
+    return tx("bets", newId(), () => ({ type: "homards", week: A().WEEK, status: "ouvert", by: me, bets: {}, created: Date.now() }), "Course ouverte. Les autres peuvent parier."); }
+  const b = openRace(); if (!b || b.status !== "ouvert") return;
+  if (t.id === "rbet") { if (needPresent()) return; const pick = racePick, mise = raceMise;
+    tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, bets: { ...(cur.bets || {}), [me]: { lob: pick, mise } } } : undefined, `Pari placé sur ${LOBS[pick][0]}!`); }
+  if (t.id === "runbet") tx("bets", b.id, cur => { if (!cur || cur.status !== "ouvert") return undefined; const bets = { ...(cur.bets || {}) }; delete bets[me]; return { ...cur, bets }; });
+  if (t.id === "rcancel") tx("bets", b.id, cur => cur && cur.status === "ouvert" ? { ...cur, status: "annule" } : undefined, "Course annulée");
+  if (t.id === "rgo") tx("bets", b.id, cur => {
+    if (!cur || cur.status !== "ouvert" || !Object.keys(cur.bets || {}).length) return undefined;
+    const a = new Uint32Array(2); crypto.getRandomValues(a);
+    let r = a[0] / 4294967296, winner = 0; for (let i = 0; i < LOBS.length; i++) { if (r < LOBS[i][1]) { winner = i; break; } r -= LOBS[i][1]; winner = i; }
+    const startAt = Date.now() + COUNT_MS;
+    return { ...cur, status: "fini", winner, seed: a[1] || 7, startAt, finishAt: startAt + RACE_MS };
+  });
+});
+
 /* ---------- Classement ---------- */
 function renderLedger() {
   const { esc, MEMBERS, shortDate } = A(); const bets = A().S.bets;
@@ -340,6 +437,12 @@ function renderLedger() {
   for (const b of bets) {
     if (b.status !== "fini" || b.created < resetAt) continue;
     if (b.type === "roue" || b.type === "des") { b.players.forEach(p => net[p] -= b.mise); net[b.winner] += b.mise * b.players.length; hist.push(`${b.type === "roue" ? "Roue" : "Dés"} : ${nm(b.winner)} +${J(b.mise * (b.players.length - 1))}`); }
+    else if (b.type === "homards") {
+      if (Date.now() < b.finishAt) continue;   // pas de spoiler avant l'arrivée
+      let best = null;
+      for (const [id, v] of Object.entries(b.bets || {})) { const g = v.lob === b.winner ? Math.round(v.mise * LOBS[b.winner][2]) : 0; net[id] = (net[id] || 0) + g - v.mise; if (g && (!best || g > best.g)) best = { id, g: g - v.mise }; }
+      hist.push(`Homards : ${LOBS[b.winner][0]} gagne${best ? ` · ${nm(best.id)} +${J(best.g)}` : ""}`);
+    }
     else if (b.type === "slot") { net[b.by] = (net[b.by] || 0) + b.gain - b.mise; if (b.gain >= b.mise * 10) hist.push(`Slots : ${nm(b.by)} +${J(b.gain - b.mise)}`); else continue; }
     else if (b.type === "poker") { const ids = new Set([...Object.keys(b.buyins || {}), ...Object.keys(b.finals || {})]);
       let top = null; ids.forEach(id => { const d = (b.finals[id] || 0) - (b.buyins[id] || 0); net[id] = (net[id] || 0) + d; if (!top || d > top.d) top = { id, d }; });
@@ -361,6 +464,9 @@ $("#settledone").addEventListener("click", () => {
   confirmReset = false; tx("bets", newId(), () => ({ type: "zero", status: "fini", by: A().me, created: Date.now() }), "Tous les comptes sont revenus à 1 000 jetons");
 });
 
-function render() { if (!window.JSAPI) return; renderSlotStatic(); renderWheel(); renderDice(); renderLedger(); }
+function render() { if (!window.JSAPI) return; renderSlotStatic(); renderRace(); renderWheel(); renderDice(); renderLedger(); }
 window.Gages = { render, renderPoker };
+// En ouvrant l'onglet Gages, on redessine la piste à la bonne largeur.
+document.querySelector('nav.tabs [data-t="gages"]')?.addEventListener("click", () => setTimeout(() => { render(); renderPoker(); }, 30));
+addEventListener("resize", () => { const b = openRace() || lastRace(); if (b && !raceAnim) drawTrack(b, b.status === "fini" ? RACE_MS : 0); });
 render(); renderPoker();
