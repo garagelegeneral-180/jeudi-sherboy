@@ -1,0 +1,31 @@
+name: La Gazette du vendredi
+
+on:
+  schedule:
+    # Vendredi 9 h à Sherbrooke, été comme hiver (13 h et 14 h UTC), plus une reprise à 15 h UTC.
+    - cron: "10 13-15 * * 5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Publier pour un jeudi précis (AAAA-MM-JJ). Laisser vide pour hier."
+        required: false
+        default: ""
+
+jobs:
+  gazette:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Installer
+        working-directory: rappels
+        run: npm install --no-audit --no-fund
+      - name: Publier la Gazette
+        working-directory: rappels
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DATE: ${{ github.event.inputs.date }}
+        run: node gazette.mjs
