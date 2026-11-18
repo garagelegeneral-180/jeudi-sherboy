@@ -71,6 +71,8 @@ self.JS_DATA = {
     ["leve", null, "Le jeudi est confirmé", true],
     ["vote", 16, "Vote pour l'endroit", true],
     ["lift", 18, "Qui a besoin d'un lift", false],
-    ["ou", 19, "On va où et à quelle heure", true]
+    ["ou", 19, "On va où et à quelle heure", true],
+    ["chat", "jasette", "Nouveaux messages dans la jasette", true],
+    ["gazette", "vendredi", "La Gazette du vendredi est sortie", true]
   ]
 };

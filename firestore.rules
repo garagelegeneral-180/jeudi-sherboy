@@ -11,6 +11,11 @@ service cloud.firestore {
     match /log/{id}     { allow read, write: if signedIn(); }
     match /photos/{id}  { allow read, create, delete: if signedIn(); }
     match /prefs/{id}   { allow read, write: if signedIn(); }
+    match /chat/{id}    { allow read, write: if signedIn(); }
+    match /quotes/{id}  { allow read, write: if signedIn(); }
+    match /bets/{id}    { allow read, write: if signedIn(); }
+    match /tables/{id}  { allow read, write: if signedIn(); }
+    match /gazette/{id} { allow read: if signedIn(); }
     // Les jetons de notification : chacun enregistre le sien, personne ne peut lire la liste.
     match /tokens/{token} { allow create, update, delete: if signedIn(); allow read: if false; }
   }

@@ -24,21 +24,23 @@ const fmt = (d, o) => d.toLocaleDateString("fr-CA", o);
 const shortDate = k => { const [y, m, d] = k.split("-").map(Number); return fmt(new Date(y, m - 1, d), { day: "numeric", month: "short" }); };
 
 /* ---------- Données ---------- */
-let S = { week: {}, weeks: [], ideas: [], state: {}, log: [], photos: [], prefs: {} };
+let S = { week: {}, weeks: [], ideas: [], state: {}, log: [], photos: [], prefs: {}, chat: [], quotes: [], bets: [], gazette: [], table: null };
 let me = ls.get("js-me", null);
 let store;
 
 // Opérations partagées : union, retrait, incrément (Firestore ou mode essai).
-const OP = { union: v => ({ __op: "union", v }), remove: v => ({ __op: "remove", v }), inc: n => ({ __op: "inc", v: n }) };
+const OP = { union: v => ({ __op: "union", v }), remove: v => ({ __op: "remove", v }), inc: n => ({ __op: "inc", v: n }), del: () => ({ __op: "del" }) };
 
 function localStore() {
   const KEY = "js-local-v1";
-  const db = ls.get(KEY, { weeks: {}, ideas: {}, state: {}, log: {}, photos: {}, prefs: {}, tokens: {} });
+  const db = ls.get(KEY, {});
+  for (const k of ["weeks", "ideas", "state", "log", "photos", "prefs", "tokens", "chat", "quotes", "bets", "gazette", "tables"]) db[k] = db[k] || {};
   const subs = [];
   const save = () => { ls.set(KEY, db); subs.forEach(f => f()); };
   const apply = (target, patch) => {
     for (const [k, v] of Object.entries(patch)) {
-      if (v && v.__op === "union") { const a = Array.isArray(target[k]) ? target[k] : []; if (!a.includes(v.v)) a.push(v.v); target[k] = a; }
+      if (v && v.__op === "del") delete target[k];
+      else if (v && v.__op === "union") { const a = Array.isArray(target[k]) ? target[k] : []; if (!a.includes(v.v)) a.push(v.v); target[k] = a; }
       else if (v && v.__op === "remove") { target[k] = (target[k] || []).filter(x => x !== v.v); }
       else if (v && v.__op === "inc") { target[k] = (target[k] || 0) + v.v; }
       else if (v && typeof v === "object" && !Array.isArray(v)) { target[k] = target[k] && typeof target[k] === "object" ? target[k] : {}; apply(target[k], v); }
@@ -58,8 +60,15 @@ function localStore() {
         cbs.log(list("log", "date", -1));
         cbs.photos(list("photos", "created", -1).slice(0, 30));
         cbs.prefs(db.prefs);
+        cbs.chat(list("chat", "created", 1).slice(-60));
+        cbs.quotes(list("quotes", "created", -1));
+        cbs.bets(list("bets", "created", -1));
+        cbs.gazette(Object.entries(db.gazette).map(([id, v]) => ({ id, ...v })).sort((a, b) => a.id < b.id ? 1 : -1));
+        cbs.table(db.tables.main || null);
       });
     },
+    async tx(col, id, fn) { const next = fn(db[col][id] ? JSON.parse(JSON.stringify(db[col][id])) : null); if (next !== undefined) { db[col][id] = next; save(); } },
+    async merge(col, id, p) { if (db[col][id]) { apply(db[col][id], p); save(); } },
     async setWeek(p) { db.weeks[WEEK] = db.weeks[WEEK] || {}; apply(db.weeks[WEEK], p); save(); },
     async setState(p) { db.state.main = db.state.main || {}; apply(db.state.main, p); save(); },
     async setPrefs(id, p) { db.prefs[id] = db.prefs[id] || {}; apply(db.prefs[id], p); save(); },
@@ -81,7 +90,8 @@ async function firebaseStore() {
   const conv = (obj) => {
     const out = {};
     for (const [k, v] of Object.entries(obj)) {
-      if (v && v.__op === "union") out[k] = fs.arrayUnion(v.v);
+      if (v && v.__op === "del") out[k] = fs.deleteField();
+      else if (v && v.__op === "union") out[k] = fs.arrayUnion(v.v);
       else if (v && v.__op === "remove") out[k] = fs.arrayRemove(v.v);
       else if (v && v.__op === "inc") out[k] = fs.increment(v.v);
       else if (v && typeof v === "object" && !Array.isArray(v)) out[k] = conv(v);
@@ -102,7 +112,21 @@ async function firebaseStore() {
       fs.onSnapshot(fs.query(fs.collection(db, "log"), fs.orderBy("date", "desc"), fs.limit(50)), s => cbs.log(docs(s)), onErr);
       fs.onSnapshot(fs.query(fs.collection(db, "photos"), fs.orderBy("created", "desc"), fs.limit(30)), s => cbs.photos(docs(s)), onErr);
       fs.onSnapshot(fs.collection(db, "prefs"), s => cbs.prefs(Object.fromEntries(s.docs.map(d => [d.id, d.data()]))), onErr);
+      fs.onSnapshot(fs.query(fs.collection(db, "chat"), fs.orderBy("created", "desc"), fs.limit(60)),
+        s => cbs.chat(s.docs.map(d => { const v = d.data({ serverTimestamps: "estimate" }); return { id: d.id, ...v, created: ts(v.created) || Date.now() }; }).reverse()), onErr);
+      fs.onSnapshot(fs.query(fs.collection(db, "quotes"), fs.orderBy("created", "desc"), fs.limit(100)),
+        s => cbs.quotes(s.docs.map(d => { const v = d.data({ serverTimestamps: "estimate" }); return { id: d.id, ...v, created: ts(v.created) || Date.now() }; })), onErr);
+      fs.onSnapshot(fs.query(fs.collection(db, "bets"), fs.orderBy("created", "desc"), fs.limit(5000)),
+        s => cbs.bets(s.docs.map(d => { const v = d.data({ serverTimestamps: "estimate" }); return { id: d.id, ...v, created: ts(v.created) || Date.now() }; })), onErr);
+      fs.onSnapshot(fs.query(fs.collection(db, "gazette"), fs.orderBy(fs.documentId(), "desc"), fs.limit(30)), s => cbs.gazette(docs(s)), onErr);
+      fs.onSnapshot(fs.doc(db, "tables", "main"), s => cbs.table(s.exists() ? s.data() : null), onErr);
     },
+    merge: (col, id, p) => fs.setDoc(fs.doc(db, col, id), conv(p), { merge: true }),
+    tx: (col, id, fn) => fs.runTransaction(db, async t => {
+      const ref = fs.doc(db, col, id); const snap = await t.get(ref);
+      const next = fn(snap.exists() ? snap.data() : null);
+      if (next !== undefined) t.set(ref, next);
+    }),
     setWeek: p => fs.setDoc(fs.doc(db, "weeks", WEEK), conv(p), { merge: true }),
     setState: p => fs.setDoc(fs.doc(db, "state", "main"), conv(p), { merge: true }),
     setPrefs: (id, p) => fs.setDoc(fs.doc(db, "prefs", id), conv(p), { merge: true }),
@@ -132,7 +156,7 @@ function setMe(id) {
   me = id; ls.set("js-me", id); $("#me").value = id;
   const tok = ls.get("js-token", null);
   if (tok && store) run(store.saveToken(tok, id));
-  renderAll();
+  renderAll(); renderChat(); renderPotd(); renderGazette(); window.Gages?.render(); window.Gages?.renderPoker();
 }
 
 /* ---------- Ce jeudi ---------- */
@@ -342,11 +366,160 @@ function renderBadges() {
   $("#badges").innerHTML = B.map(([t, s]) => `<div class="badge"><b>${t}</b><span>${esc(s)}</span></div>`).join("");
 }
 
+/* ---------- Jasette ---------- */
+const REACTS = ["🍺", "🔥", "😂", "💀"];
+const timeOf = ms => new Date(ms).toLocaleTimeString("fr-CA", { hour: "numeric", minute: "2-digit" });
+const dayOf = ms => { const d = new Date(ms), t = new Date(); const y = new Date(t); y.setDate(t.getDate() - 1);
+  if (d.toDateString() === t.toDateString()) return "Aujourd'hui"; if (d.toDateString() === y.toDateString()) return "Hier";
+  return fmt(d, { weekday: "long", day: "numeric", month: "long" }); };
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${/youtu|tiktok|instagram|facebook|fb\.watch|vimeo/i.test(u) ? "▶ Voir la vidéo" : u}</a>`);
+let chatSeen = ls.get("js-chat-seen", 0), justSent = false, pickFor = null, pendingImg = null;
+const chatVisible = () => !$("#v-jasette").hidden;
+
+function renderChat() {
+  const box = $("#chat");
+  const nearBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 160;
+  let html = "", lastDay = "", prev = null;
+  for (const m of S.chat) {
+    const day = dayOf(m.created);
+    if (day !== lastDay) { html += `<div class="day">${esc(day)}</div>`; lastDay = day; prev = null; }
+    const who = byId[m.by] || { name: "?", color: "#888" }, mine = m.by === me;
+    const grouped = prev && prev.by === m.by && m.created - prev.created < 5 * 60e3;
+    const r = m.r || {}; const counts = {};
+    Object.values(r).forEach(e => counts[e] = (counts[e] || 0) + 1);
+    const reacts = Object.entries(counts).map(([e, n]) => `<button data-react="${m.id}" data-e="${e}" class="${r[me] === e ? "mine" : ""}">${e} ${n}</button>`).join("");
+    html += `<div class="msg${mine ? " me" : ""}${grouped ? " grouped" : ""}">${avatar(who)}<div class="mcol">
+      <div class="bubble" data-msg="${m.id}">${!mine && !grouped ? `<span class="from">${esc(who.name)}</span>` : ""}${m.img ? `<img src="${esc(m.img)}" alt="Photo de ${esc(who.name)}" loading="lazy">` : ""}${m.text ? `<span>${linkify(m.text)}</span>` : ""}<span class="time">${timeOf(m.created)}</span></div>
+      ${pickFor === m.id ? `<div class="picker-r">${REACTS.map(e => `<button data-pick="${m.id}" data-e="${e}" aria-label="Réagir ${e}">${e}</button>`).join("")}${mine ? `<button data-delmsg="${m.id}" aria-label="Effacer le message" style="font-size:13px">Effacer</button>` : ""}</div>` : ""}
+      ${reacts ? `<div class="reacts">${reacts}</div>` : ""}</div></div>`;
+    prev = m;
+  }
+  box.innerHTML = html || `<div class="empty">La jasette est vide. Dis bonjour à la gang, ou partage la photo du jour!</div>`;
+  if (chatVisible()) { if (justSent || nearBottom) scrollTo(0, document.documentElement.scrollHeight); markSeen(); }
+  justSent = false;
+  renderBadge();
+}
+function markSeen() { const last = S.chat.length ? S.chat[S.chat.length - 1].created : 0; if (last > chatSeen) { chatSeen = last; ls.set("js-chat-seen", last); } renderBadge(); }
+function renderBadge() {
+  const n = S.chat.filter(m => m.by !== me && m.created > chatSeen).length;
+  const b = $("#chatbadge"); b.hidden = !n || chatVisible(); b.textContent = n > 9 ? "9+" : n;
+}
+$("#chat").onclick = e => {
+  const bub = e.target.closest("[data-msg]"), pick = e.target.closest("[data-pick]"), rb = e.target.closest("[data-react]"), del = e.target.closest("[data-delmsg]");
+  if (e.target.closest("a")) return;
+  if (pick || rb) {
+    const id = (pick || rb).dataset.pick || (pick || rb).dataset.react, em = (pick || rb).dataset.e;
+    const m = S.chat.find(x => x.id === id); const cur = (m.r || {})[me];
+    pickFor = null; run(store.merge("chat", id, { r: { [me]: cur === em ? OP.del() : em } })); renderChat(); return;
+  }
+  if (del) { pickFor = null; run(store.remove("chat", del.dataset.delmsg), "Message effacé"); return; }
+  if (bub) { pickFor = pickFor === bub.dataset.msg ? null : bub.dataset.msg; renderChat(); }
+};
+function resizeImage(file, max, cb) {
+  const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => { const s = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement("canvas");
+    c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url); cb(c.toDataURL("image/jpeg", 0.72)); };
+  img.onerror = () => toast("Cette image n'a pas pu être lue. Essaie une photo JPEG ou PNG.");
+  img.src = url;
+}
+$("#chatphoto").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  resizeImage(f, 1000, src => { pendingImg = src; $("#chatprevimg").src = src; $("#chatprev").hidden = false; $("#chatin").focus(); }); };
+$("#chatprevdel").onclick = () => { pendingImg = null; $("#chatprev").hidden = true; };
+$("#chatform").onsubmit = e => {
+  e.preventDefault(); if (!me) return showPicker();
+  const text = $("#chatin").value.trim(); if (!text && !pendingImg) return;
+  const msg = { by: me }; if (text) msg.text = text; if (pendingImg) msg.img = pendingImg;
+  $("#chatin").value = ""; pendingImg = null; $("#chatprev").hidden = true; justSent = true;
+  run(store.add("chat", msg));
+};
+
+/* Photo du jour : la dernière photo partagée dans la jasette depuis 24 h */
+function renderPotd() {
+  const p = S.chat.filter(m => m.img && Date.now() - m.created < 24 * 36e5).pop();
+  for (const id of ["#potd-chat", "#potd-jeudi"]) {
+    const el = $(id);
+    if (!p) { el.hidden = true; continue; }
+    const who = byId[p.by]?.name || "Quelqu'un";
+    el.innerHTML = `<img src="${esc(p.img)}" alt="Photo du jour de ${esc(who)}"><div class="cap"><span class="eyebrow" style="color:var(--pop)">Photo du jour</span><b>${p.text ? linkify(p.text) : "Ça donne le goût, hein?"}</b><span class="note">par ${esc(who)} · ${timeOf(p.created)}</span></div>`;
+    el.hidden = false;
+  }
+}
+$("#potd-jeudi").onclick = e => { if (!e.target.closest("a")) showTab("jasette"); };
+
+/* ---------- Livre des citations ---------- */
+MEMBERS.forEach(m => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.name; $("#quoteby").appendChild(o); });
+$("#quoteform").onsubmit = e => {
+  e.preventDefault(); const t = $("#quotein").value.trim().replace(/^[«"]\s*|\s*[»"]$/g, ""); if (!t) return;
+  $("#quotein").value = ""; run(store.add("quotes", { t, who: $("#quoteby").value, by: me, date: WEEK }), "Citation ajoutée au livre");
+};
+function renderQuotes() {
+  $("#quotes").innerHTML = S.quotes.length ? S.quotes.map(q => `<li><blockquote>« ${esc(q.t)} »</blockquote><div class="note"><span>— ${esc(byId[q.who]?.name || "?")}, ${shortDate(q.date || WEEK)}</span>${q.by === me ? `<button class="mini" data-delq="${q.id}">retirer</button>` : ""}</div></li>`).join("")
+    : `<li class="empty">Le livre est vide. La prochaine niaiserie mémorable va ici.</li>`;
+}
+$("#quotes").onclick = e => { const b = e.target.closest("[data-delq]"); if (b) run(store.remove("quotes", b.dataset.delq), "Citation retirée"); };
+
+/* ---------- Météo du jeudi soir (Open-Meteo, sans clé) ---------- */
+const WMO = [[0, "☀️", "Ciel dégagé"], [1, "🌤️", "Plutôt beau"], [2, "⛅", "Nuageux par bouts"], [3, "☁️", "Couvert"], [45, "🌫️", "Brouillard"], [51, "🌦️", "Bruine"], [61, "🌧️", "Pluie"], [66, "🌧️", "Pluie verglaçante"], [71, "🌨️", "Neige"], [77, "🌨️", "Grésil"], [80, "🌦️", "Averses"], [85, "🌨️", "Averses de neige"], [95, "⛈️", "Orages"]];
+async function loadMeteo() {
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=45.4042&longitude=-71.8929&hourly=temperature_2m,weather_code,precipitation_probability&timezone=America%2FToronto&start_date=${WEEK}&end_date=${WEEK}`;
+    const j = await (await fetch(u)).json();
+    const i = j.hourly.time.findIndex(t => t.endsWith("T19:00"));
+    if (i < 0) return;
+    const code = j.hourly.weather_code[i], w = WMO.filter(x => x[0] <= code).pop();
+    const temp = Math.round(j.hourly.temperature_2m[i]), pop = j.hourly.precipitation_probability?.[i];
+    const tip = temp >= 18 && code < 51 ? "Soirée terrasse!" : temp <= -10 ? "On reste en dedans." : code >= 51 ? "Apportez un parapluie." : "";
+    $("#meteo").textContent = `${w[1]} ${temp} °C à 19 h · ${w[2]}${pop != null ? ` · ${pop} % de pluie` : ""}${tip ? " · " + tip : ""}`;
+    $("#meteo").hidden = false;
+  } catch (e) { console.warn("météo", e); }
+}
+loadMeteo();
+
+/* ---------- La Gazette du vendredi ---------- */
+const LAST_THU = new Date(THU); LAST_THU.setDate(LAST_THU.getDate() - 7);
+const LAST_KEY = keyOf(LAST_THU);
+function gazetteFor(date) {
+  const stored = S.gazette.find(g => g.id === date);
+  if (stored) return stored;
+  const week = S.weeks.find(w => w.id === date);
+  if (!week || !week.rsvp) return null;
+  const ideas = S.ideas.slice().sort((a, b) => (b.v || []).length - (a.v || []).length);
+  const photo = S.chat.filter(m => m.img && keyOf(new Date(m.created)) === date).pop();
+  return self.makeGazette({ date, week, logEntry: S.log.find(l => l.date === date), quotes: S.quotes.filter(q => q.date === date).reverse(), photo, topIdea: ideas[0], CFG, D });
+}
+function gazetteHTML(g) {
+  const [y, m, d] = g.date.split("-").map(Number); const fri = new Date(y, m - 1, d + 1);
+  return `<div class="mast"><b>LA GAZETTE SHERBOY</b><span>${esc(fmt(fri, { weekday: "long", day: "numeric", month: "long", year: "numeric" }))} · Édition no ${g.edition} · Prix : une pinte</span></div>
+    <h3>${esc(g.titre)}</h3>
+    ${g.photo ? `<figure style="margin:0"><img src="${esc(g.photo)}" alt="Photo de la soirée"><figcaption>${esc(g.photoTxt || "La photo du jeudi")} — photo : ${esc(g.photoBy || "")}</figcaption></figure>` : ""}
+    <div class="chapeau">${esc(g.chapeau)}</div>
+    ${g.citation ? `<div class="cit">« ${esc(g.citation.t)} »<small>— ${esc(g.citation.who)}, citation de la semaine</small></div>` : ""}
+    <div class="cols">${g.breves.map(b => `<p>${esc(b)}</p>`).join("")}</div>
+    <div class="foot"><span>Présents : ${esc(g.presents.join(", ") || "personne")}</span>${g.etoiles ? `<span>Note : ${"★".repeat(g.etoiles)}${"☆".repeat(5 - g.etoiles)}</span>` : ""}</div>`;
+}
+function renderGazette() {
+  const friday9 = new Date(LAST_THU); friday9.setDate(friday9.getDate() + 1); friday9.setHours(9);
+  const g = Date.now() >= +friday9 && Date.now() - +friday9 < 6 * 864e5 ? gazetteFor(LAST_KEY) : null;
+  $("#gazette").hidden = !g; if (g) $("#gazette").innerHTML = gazetteHTML(g);
+  const arch = S.gazette.slice();
+  if (g && !arch.some(a => a.id === g.date)) arch.unshift({ id: g.date, ...g });
+  $("#gazarch").innerHTML = arch.length ? arch.map(a => `<li class="idea two" data-gaz="${a.id}" style="cursor:pointer"><div style="min-width:0"><div class="kind">${shortDate(a.id)} · no ${a.edition}</div><div class="t">${esc(a.titre)}</div></div><span class="note">Lire</span></li>`).join("")
+    : `<li class="empty">La première Gazette sortira le vendredi après votre premier jeudi.</li>`;
+}
+$("#gazarch").onclick = e => { const li = e.target.closest("[data-gaz]"); if (!li) return;
+  const g = gazetteFor(li.dataset.gaz); const v = $("#gazview");
+  if (!g || (!v.hidden && v.dataset.id === li.dataset.gaz)) { v.hidden = true; return; }
+  v.innerHTML = gazetteHTML(g); v.dataset.id = li.dataset.gaz; v.hidden = false; v.scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+/* Accès partagé pour les jeux (gages.js) */
+window.JSAPI = { get S() { return S; }, get me() { return me; }, get store() { return store; }, OP, run, toast, esc, avatar, byId, MEMBERS, WEEK, fmt, shortDate, showPicker };
+
 /* ---------- Rappels et notifications ---------- */
 const remDefault = Object.fromEntries(D.reminders.map(r => [r[0], r[3]]));
 function renderRem() {
   const p = { ...remDefault, ...((S.prefs[me] || {}).rem || {}) };
-  $("#rem").innerHTML = D.reminders.map(([k, h, m]) => `<li><div><div class="when">${h == null ? "Dès que ça lève" : "Jeudi · " + h + " h"}</div><div class="msg">${esc(m)}</div></div><button class="sw" role="switch" aria-checked="${!!p[k]}" aria-label="${esc(m)}" data-rem="${k}"></button></li>`).join("");
+  $("#rem").innerHTML = D.reminders.map(([k, h, m]) => `<li><div><div class="when">${h == null ? "Dès que ça lève" : h === "jasette" ? "7 jours sur 7 · aux 15 min" : h === "vendredi" ? "Vendredi · 9 h" : "Jeudi · " + h + " h"}</div><div class="msg">${esc(m)}</div></div><button class="sw" role="switch" aria-checked="${!!p[k]}" aria-label="${esc(m)}" data-rem="${k}"></button></li>`).join("");
 }
 $("#rem").onclick = e => { const b = e.target.closest("[data-rem]"); if (!b || !me) return;
   const cur = { ...remDefault, ...((S.prefs[me] || {}).rem || {}) }; run(store.setPrefs(me, { rem: { [b.dataset.rem]: !cur[b.dataset.rem] } })); };
@@ -392,15 +565,18 @@ function showTab(t) {
   document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.t === t));
   document.querySelectorAll(".view").forEach(v => v.hidden = v.id !== "v-" + t);
   if (t === "idees") drawWheel();
-  window.scrollTo(0, 0);
+  if (t === "jasette") { requestAnimationFrame(() => scrollTo(0, document.documentElement.scrollHeight)); markSeen(); }
+  else window.scrollTo(0, 0);
+  renderBadge();
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => { showTab(b.dataset.t); history.replaceState(null, "", "#" + b.dataset.t); });
-if (["idees", "carnet", "rappels"].includes(location.hash.slice(1))) showTab(location.hash.slice(1));
+if (["jasette", "idees", "carnet", "gages", "rappels"].includes(location.hash.slice(1))) showTab(location.hash.slice(1));
 
 function renderAll() {
   if (!me) return;
   renderJeudi(); renderCapt(); renderDefi(); renderGuess();
-  renderIdees(); renderWeekly(); renderRounds(); renderLog(); renderPass(); renderPhotos(); renderBadges(); renderRem();
+  renderIdees(); renderWeekly(); renderRounds(); renderLog(); renderPass(); renderPhotos(); renderBadges(); renderRem(); renderQuotes(); renderGazette();
+  window.Gages?.render();
 }
 
 /* ---------- Démarrage ---------- */
@@ -422,7 +598,12 @@ if ("serviceWorker" in navigator) {
   }
   if (store.mode === "local") { $("#setup").hidden = false; setSync("Mode essai"); }
   const set = k => v => { S[k] = v; renderAll(); };
-  store.watch({ week: set("week"), weeks: set("weeks"), ideas: set("ideas"), state: set("state"), log: set("log"), photos: set("photos"), prefs: set("prefs") });
+  store.watch({ week: set("week"), weeks: set("weeks"), ideas: set("ideas"), state: set("state"), log: set("log"), photos: set("photos"), prefs: set("prefs"),
+    chat: v => { S.chat = v; if (me) { renderChat(); renderPotd(); } },
+    quotes: v => { S.quotes = v; if (me) renderQuotes(); },
+    bets: v => { S.bets = v; if (me) window.Gages?.render(); },
+    gazette: v => { S.gazette = v; if (me) renderGazette(); },
+    table: v => { S.table = v; if (me) window.Gages?.renderPoker(); } });
   if (swReg == null && "serviceWorker" in navigator) swReg = await navigator.serviceWorker.ready.catch(() => null);
   initNotif();
 })();

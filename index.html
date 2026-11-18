@@ -41,15 +41,19 @@
 
   <!-- CE JEUDI -->
   <section id="v-jeudi" class="view stack">
+    <article class="gazette" id="gazette" hidden></article>
     <div class="ticket">
       <div class="foam"></div><div class="bubbles"></div>
       <div class="eyebrow">Une pinte · 1 Sherboy</div>
       <h1>Jeudi Sherboy</h1>
       <div class="date" id="date"></div>
+      <div class="meteo" id="meteo" hidden></div>
       <div id="stamp"></div>
       <div class="perf"></div>
       <div class="count" id="count"></div>
     </div>
+
+    <div class="card potd" id="potd-jeudi" hidden></div>
 
     <div class="card">
       <h2 id="rsvptitle">T'es-tu là jeudi?</h2>
@@ -92,6 +96,25 @@
       <div class="rounds" id="guess"></div>
       <div class="note" id="guesses"></div>
     </div>
+  </section>
+
+  <!-- JASETTE -->
+  <section id="v-jasette" class="view stack" hidden>
+    <div class="card potd" id="potd-chat" hidden></div>
+    <div class="chat" id="chat" aria-live="polite"></div>
+    <div class="chatprev" id="chatprev" hidden>
+      <img id="chatprevimg" alt="Photo à envoyer">
+      <button type="button" class="mini" id="chatprevdel">Retirer la photo</button>
+    </div>
+    <form class="chatbar" id="chatform" autocomplete="off">
+      <label class="attach" for="chatphoto" title="Ajouter une photo">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9Zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+        <span class="sr">Ajouter une photo</span>
+        <input type="file" id="chatphoto" accept="image/*">
+      </label>
+      <input type="text" id="chatin" placeholder="Écris à la gang… ou colle un lien de vidéo" maxlength="500">
+      <button class="btn primary" type="submit" id="chatsend">Envoyer</button>
+    </form>
   </section>
 
   <!-- IDÉES -->
@@ -154,6 +177,27 @@
     </div>
 
     <div class="card">
+      <h2>Les archives de la Gazette</h2>
+      <div class="sub">Chaque vendredi à 9 h, la Gazette raconte le jeudi de la veille. Touche une édition pour la relire.</div>
+      <ul class="ideas" id="gazarch"></ul>
+      <article class="gazette" id="gazview" hidden></article>
+    </div>
+
+    <div class="card">
+      <h2>Le Livre des citations</h2>
+      <div class="sub">Les meilleures phrases dites pendant les jeudis. Ce qui se dit au jeudi reste dans le livre.</div>
+      <form class="add quoteform" id="quoteform">
+        <div class="row"><input type="text" id="quotein" placeholder="« Une dernière pis on y va »" maxlength="160" autocomplete="off"></div>
+        <div class="row" style="align-items:center">
+          <label for="quoteby" class="note">Dit par</label>
+          <select id="quoteby"></select>
+          <button class="btn primary" type="submit" style="margin-left:auto">Ajouter</button>
+        </div>
+      </form>
+      <ul class="quotes" id="quotes"></ul>
+    </div>
+
+    <div class="card">
       <h2>Passeport Sherbrooke</h2>
       <div class="sub" id="passsub"></div>
       <div class="stampgrid" id="passport"></div>
@@ -171,6 +215,56 @@
     <div class="card">
       <h2>Les titres de la gang</h2>
       <div class="badges" id="badges"></div>
+    </div>
+  </section>
+
+  <!-- GAGES -->
+  <section id="v-gages" class="view stack" hidden>
+    <div class="note">On joue avec des <b>jetons fictifs</b>, pour le fun et pour l'honneur, 7 jours sur 7. Quelqu'un ouvre une partie, les autres s'inscrivent sur leur téléphone, comme les jeux en avion.</div>
+
+    <div class="card bank" id="bank"></div>
+
+    <div class="card">
+      <h2>Sherboy Slots</h2>
+      <div class="sub">Machine à sous contre la banque, avec les symboles du logo de la gang. Trois logos, c'est le gros lot : 500 fois la mise!</div>
+      <div class="slot" id="slot"><span class="reel"></span><span class="reel"></span><span class="reel"></span></div>
+      <div class="row2" style="align-items:center;justify-content:center"><span class="note">Mise</span><div class="rounds" id="slotmise"></div></div>
+      <button class="btn primary" id="slotgo" style="font-size:18px">Tirer le levier</button>
+      <div class="result" id="slotresult" aria-live="polite"></div>
+      <details class="note"><summary>Table des gains</summary><div class="paytable" id="paytable"></div></details>
+    </div>
+
+    <div class="card">
+      <h2>Le poker du jeudi</h2>
+      <div class="sub">Texas Hold'em en direct. Chacun voit ses cartes sur son téléphone, le flop, le turn et la river sortent sur tous les écrans.</div>
+      <div id="poker"></div>
+    </div>
+
+    <div class="card">
+      <h2>La roue des gages</h2>
+      <div class="sub">Chacun met la même mise dans le pot. La roue tourne sur tous les téléphones et le gagnant ramasse tout.</div>
+      <div id="wheelbox"></div>
+      <div class="wheelwrap">
+        <canvas id="betwheel" width="560" height="560" style="width:260px"></canvas>
+        <div class="result" id="betresult" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Le jeu des dés</h2>
+      <div class="sub">Chacun lance ses deux dés sur son téléphone. Le plus haut total ramasse le pot. Égalité : seuls les ex aequo relancent.</div>
+      <div id="dicebox"></div>
+      <div class="dice" id="dice"></div>
+      <div class="result" id="diceresult" aria-live="polite"></div>
+    </div>
+
+    <div class="card">
+      <h2>La banque des Sherboys</h2>
+      <div class="sub">Le solde de chacun, gardé de semaine en semaine. Tout le monde part avec 1 000 jetons.</div>
+      <ul class="people" id="ledger"></ul>
+      <div class="row2"><button class="toggle" id="settledone">Remettre tous les comptes à 1 000 jetons</button></div>
+      <div class="sub"><b>Derniers gages</b></div>
+      <ul class="log" id="bethist"></ul>
     </div>
   </section>
 
@@ -214,15 +308,20 @@
 </div>
 
 <nav class="tabs" role="tablist"><div>
-  <button role="tab" data-t="jeudi" aria-selected="true">Ce jeudi</button>
+  <button role="tab" data-t="jeudi" aria-selected="true">Jeudi</button>
+  <button role="tab" data-t="jasette" aria-selected="false">Jasette<span class="badge-n" id="chatbadge" hidden></span></button>
   <button role="tab" data-t="idees" aria-selected="false">Idées</button>
   <button role="tab" data-t="carnet" aria-selected="false">Carnet</button>
+  <button role="tab" data-t="gages" aria-selected="false">Gages</button>
   <button role="tab" data-t="rappels" aria-selected="false">Rappels</button>
 </div></nav>
 <div class="toast" id="toast" hidden></div>
 
 <script src="config.js"></script>
 <script src="data.js"></script>
+<script src="gazette.js"></script>
+<script src="poker.js"></script>
 <script type="module" src="app.js"></script>
+<script type="module" src="gages.js"></script>
 </body>
 </html>
