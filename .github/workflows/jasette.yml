@@ -1,0 +1,29 @@
+name: Avertir la jasette
+
+on:
+  schedule:
+    # Aux 15 minutes, 7 jours sur 7 : avertit la gang des nouveaux messages.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: jasette
+  cancel-in-progress: false
+
+jobs:
+  jasette:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Installer
+        working-directory: rappels
+        run: npm install --no-audit --no-fund
+      - name: Avertir des nouveaux messages
+        working-directory: rappels
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node jasette.mjs
